@@ -175,19 +175,19 @@ describe("version discovery from an isolated tree", () => {
 });
 
 describe("engineRelPath / resolveEngineDir", () => {
-  test("the live version is validate/src/validators/; any other semver is under versions/<semver>/validators/", () => {
+  test("the live version is validator/validators/; any other semver is under versions/<semver>/validators/", () => {
     expect(engineRelPath(LIVE_VERSION)).toBe(
-      join("validate", "src", "validators"),
+      join("validator", "validators"),
     );
     expect(engineRelPath("2.0.0")).toBe(join("versions", "2.0.0", "validators"));
   });
 
   test("resolves the live engine directory", async () => {
     await expect(findEngineDir(LIVE_VERSION)).resolves.toContain(
-      join("validate", "src", "validators"),
+      join("validator", "validators"),
     );
     await expect(resolveEngineDir("1.0.0")).resolves.toContain(
-      join("validate", "src", "validators"),
+      join("validator", "validators"),
     );
   });
 
@@ -205,7 +205,7 @@ describe("engineRelPath / resolveEngineDir", () => {
     try {
       await mkdir(join(dir, "versions", "1.0.0"), { recursive: true });
       await expect(resolveEngineDir("1.0.0", dir)).rejects.toThrow(
-        /validator engine not found: validate[/\\]src[/\\]validators/,
+        /validator engine not found: validator[/\\]validators/,
       );
       await expect(resolveEngineDir("2.0.0", dir)).rejects.toThrow(
         /unknown spec version: 2\.0\.0/,

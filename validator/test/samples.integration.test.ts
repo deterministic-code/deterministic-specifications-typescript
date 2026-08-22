@@ -9,11 +9,10 @@ import {
   ServicesValidator,
   SpecValidator,
   ViewTypesValidator,
-  LIVE_VERSION,
-  findAncestorPath,
-  parseYamlWithPositions,
-  resolveSpecPath,
-} from "../src/index.ts";
+} from "../index.ts";
+import { parseYamlWithPositions } from "../yamlPositions.ts";
+import { findAncestorPath, resolveSpecPath } from "../resolveSpecPath.ts";
+import { LIVE_VERSION } from "../specVersion.ts";
 import {
   collectErrorPoints,
   collectValidPoints,

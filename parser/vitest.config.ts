@@ -6,12 +6,8 @@ export default defineConfig({
     testTimeout: 40_000,
     coverage: {
       provider: "v8",
-      include: ["src/**/*.ts"],
-      exclude: [
-        "src/**/*.test.ts",
-        "src/specification.ts",
-        "src/specification-parser.ts",
-      ],
+      include: ["**/*.ts"],
+      exclude: ["**/*.test.ts", "test/**", "specification-parser.ts", "vitest.config.ts"],
       reporter: ["text"],
       thresholds: {
         lines: 100,

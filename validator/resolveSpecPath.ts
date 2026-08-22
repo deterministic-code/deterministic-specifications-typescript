@@ -127,13 +127,12 @@ export async function resolveSpecPath(
 
 export function engineRelPath(version: string): string {
   return isLiveVersion(version)
-    ? join("validate", "src", "validators")
+    ? join("validator", "validators")
     : join("versions", version, "validators");
 }
 
 const LIVE_ENGINE_FILE = join(
-  "validate",
-  "src",
+  "validator",
   "validators",
   VALIDATOR_ENGINE_FILE,
 );

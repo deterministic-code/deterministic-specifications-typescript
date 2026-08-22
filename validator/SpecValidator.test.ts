@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
-import { LIVE_VERSION, SpecValidator, resolveSpecPath } from "./index.ts";
+import { SpecValidator } from "./index.ts";
+import { resolveSpecPath } from "./resolveSpecPath.ts";
+import { LIVE_VERSION } from "./specVersion.ts";
 import {
   errorFromUnknown,
   formatAjvError,

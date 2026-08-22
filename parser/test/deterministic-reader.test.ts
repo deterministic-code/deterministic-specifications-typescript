@@ -3,7 +3,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "vitest";
-import { fileReader, memoryReader } from "../src/deterministic-reader.ts";
+import { fileReader, memoryReader } from "../deterministic-reader.ts";
 
 describe("memoryReader", () => {
   it("throws when a file is missing", async () => {

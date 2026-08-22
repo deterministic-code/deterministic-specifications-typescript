@@ -1,5 +1,5 @@
 import { stringify } from "yaml";
-import type { DatasourceType } from "./parser/specification.ts";
+import type { DatasourceType } from "./specification.ts";
 
 export type DatasourceTypeTree = { [name: string]: DatasourceTypeTree };
 

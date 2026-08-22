@@ -2,7 +2,7 @@
 
 Shared TypeScript validation engine for the deterministic YAML contract. AJV
 (draft 2020-12) compilation and source-position mapping live here so every
-error reports `{ line, col }`. Live (`1.0.0`) engines live in [`src/validators/engines.ts`](./src/validators/engines.ts);
+error reports `{ line, col }`. Live (`1.0.0`) engines live in [`validators/engines.ts`](./validators/engines.ts);
 frozen engines live under [`versions/<semver>/validators/engines.ts`](https://github.com/deterministic-code/deterministic-specifications/tree/main/versions).
 
 ```ts
@@ -18,12 +18,12 @@ const fromFile = await validator.validateFile("deterministic/datasource_types.ya
 
 The exported classes are facades: they require a semver `version` on the
 document and load that version's engine. `1.0.0` (live) uses
-`src/validators/engines.ts`; any other published semver uses
+`validators/engines.ts`; any other published semver uses
 `versions/<semver>/validators/engines.ts`. A missing, non-semver, or unknown
 version is a validation error. Each engine is pinned — a `1.0.0` engine
 rejects `version: 2.0.0` and vice versa.
 
-Live tests under `src/validators/validator.test.ts` load every archived engine
+Live tests under `validators/validator.test.ts` load every archived engine
 by version. That is the proof that a published snapshot is still supported.
 
 Integration samples live in the [deterministic-specifications](https://github.com/deterministic-code/deterministic-specifications) repo under [`samples/`](https://github.com/deterministic-code/deterministic-specifications/tree/main/samples). Valid

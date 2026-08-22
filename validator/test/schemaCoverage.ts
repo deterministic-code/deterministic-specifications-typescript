@@ -1,6 +1,6 @@
 import { parseDocument } from "yaml";
 import Ajv2020 from "ajv/dist/2020.js";
-import { resolveAjvCtor } from "../src/SpecValidator.ts";
+import { resolveAjvCtor } from "../SpecValidator.ts";
 
 export type Schema = Record<string, unknown>;
 

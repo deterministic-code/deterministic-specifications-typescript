@@ -7,20 +7,12 @@
   "exports": {
     "./package.json": "./package.json",
     ".": {
-      "types": "./validate/src/index.ts",
-      "import": "./validate/src/index.ts"
-    },
-    "./validate": {
-      "types": "./validate/src/index.ts",
-      "import": "./validate/src/index.ts"
+      "types": "./validator/index.ts",
+      "import": "./validator/index.ts"
     },
     "./parser": {
-      "types": "./parser/src/specification-parser.ts",
-      "import": "./parser/src/specification-parser.ts"
-    },
-    "./parser/specification": {
-      "types": "./parser/src/specification.ts",
-      "import": "./parser/src/specification.ts"
+      "types": "./parser/specification-parser.ts",
+      "import": "./parser/specification-parser.ts"
     }
   },
   "repository": {

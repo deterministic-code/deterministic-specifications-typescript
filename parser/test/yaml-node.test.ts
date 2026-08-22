@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "vitest";
-import { YamlNode } from "../src/yaml-node.ts";
+import { YamlNode } from "../yaml-node.ts";
 
 describe("YamlNode", () => {
   it("reads string, number, boolean, and null literals", () => {

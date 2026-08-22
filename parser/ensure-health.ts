@@ -1,8 +1,8 @@
-import { Deterministic, type IDeterministic } from "./parser/deterministic.ts";
+import { Deterministic, type IDeterministic } from "./deterministic.ts";
 import type {
   CustomRouteEntry,
   CustomServiceEntry,
-} from "./parser/specification.ts";
+} from "./specification.ts";
 
 export const HEALTH_SERVICE_NAME = "HealthCheckService";
 export const HEALTH_SERVICE_METHOD = "check";

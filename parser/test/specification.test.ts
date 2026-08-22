@@ -10,7 +10,7 @@ import {
   uniqueLookupFields,
   type DatasourceType,
   type ViewType,
-} from "../src/parser/specification.ts";
+} from "../specification.ts";
 
 const ds = (
   name: string,

@@ -8,15 +8,10 @@
     ".": {
       "types": "./dist/specification-parser.d.ts",
       "import": "./dist/specification-parser.js"
-    },
-    "./specification": {
-      "types": "./dist/specification.d.ts",
-      "import": "./dist/specification.js"
     }
   },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",

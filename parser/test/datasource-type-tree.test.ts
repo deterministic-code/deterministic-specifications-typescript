@@ -15,8 +15,8 @@ import {
   datasourceTypeTreeJson,
   datasourceTypeTreeXml,
   datasourceTypeTreeYaml,
-} from "../src/datasource-type-tree.ts";
-import type { DatasourceType } from "../src/parser/specification.ts";
+} from "../datasource-type-tree.ts";
+import type { DatasourceType } from "../specification.ts";
 
 const ds = (name: string, refs: string[] = []): DatasourceType => ({
   name,

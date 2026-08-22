@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "vitest";
-import { memoryReader } from "../src/deterministic-reader.ts";
-import { DeterministicParser } from "../src/parser/specification-parser.ts";
+import { memoryReader } from "../deterministic-reader.ts";
+import { DeterministicParser } from "../parser/specification-parser.ts";
 
 const serviceClassName = (entity: string) => `${entity}_service`;
 

@@ -3,7 +3,7 @@ import type { IDeterministicReader } from "../deterministic-reader.ts";
 import { ensureHealth } from "../ensure-health.ts";
 import { fromSettings } from "../settings.ts";
 import { compileRoutesFilter, compileServicesFilter } from "./compile-filter.ts";
-import { Deterministic, type IDeterministic } from "./deterministic.ts";
+import { Deterministic, type IDeterministic } from "../deterministic.ts";
 import {
   DATASOURCE_SEEDS_YAML,
   DATASOURCE_TYPES_YAML,
@@ -34,14 +34,14 @@ import {
   type ServiceCandidate,
   type ViewEnrichment,
   type ViewType,
-} from "./specification.ts";
+} from "../specification.ts";
 import { compareByDatasourceTypeOrder } from "../datasource-type-tree.ts";
 import { YamlNode } from "../yaml-node.ts";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-export type { IDeterministic } from "./deterministic.ts";
+export type { IDeterministic } from "../deterministic.ts";
 
 type RawDatasourceField = {
   name: string;

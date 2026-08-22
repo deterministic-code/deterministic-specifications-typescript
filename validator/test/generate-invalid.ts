@@ -1,5 +1,5 @@
 /**
- * Writes samples/invalid/** from the live specs. Run from validate/:
+ * Writes samples/invalid/** from the live specs. Run from validator/:
  *   node --experimental-strip-types test/generate-invalid.ts
  */
 import { mkdir, rm, writeFile } from "node:fs/promises";
@@ -10,7 +10,8 @@ import {
   loadSchema,
   type Schema,
 } from "./schemaCoverage.ts";
-import { LIVE_VERSION, findAncestorPath, resolveSpecPath } from "../src/index.ts";
+import { findAncestorPath, resolveSpecPath } from "../resolveSpecPath.ts";
+import { LIVE_VERSION } from "../specVersion.ts";
 import { readFile } from "node:fs/promises";
 
 type Host = Record<string, unknown>;

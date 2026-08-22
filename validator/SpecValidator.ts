@@ -113,11 +113,41 @@ export function errorFromUnknown(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** Extra checks run after JSON Schema succeeds. First failure wins. */
+export type AfterSchemaFn = (
+  parsed: ParsedYaml,
+  options?: ValidateOptions,
+) => SpecValidationResult | Promise<SpecValidationResult>;
+
+/** Injects path-derived options when {@link FileValidator.validateFile} is used. */
+export type FileOptionsFn = (
+  path: string,
+  options?: ValidateOptions,
+) => ValidateOptions | Promise<ValidateOptions | undefined> | undefined;
+
+async function firstFailure(
+  checks: readonly AfterSchemaFn[],
+  parsed: ParsedYaml,
+  options?: ValidateOptions,
+): Promise<SpecValidationResult> {
+  for (const check of checks) {
+    const result = await check(parsed, options);
+    if (!result.valid) return result;
+  }
+  return { valid: true, errors: [] };
+}
+
 /**
  * Shared parse + file entry: YAML syntax errors are mapped here; subclasses
  * implement {@link check} against the parsed document.
  */
 export abstract class FileValidator {
+  readonly #fileOptions?: FileOptionsFn;
+
+  constructor(fileOptions?: FileOptionsFn) {
+    this.#fileOptions = fileOptions;
+  }
+
   async validate(
     text: string,
     options?: ValidateOptions,
@@ -134,10 +164,10 @@ export abstract class FileValidator {
   ): Promise<SpecValidationResult>;
 
   protected async optionsForFile(
-    _path: string,
+    path: string,
     options?: ValidateOptions,
   ): Promise<ValidateOptions | undefined> {
-    return options;
+    return this.#fileOptions ? this.#fileOptions(path, options) : options;
   }
 
   async validateFile(
@@ -160,14 +190,23 @@ export abstract class FileValidator {
  * version. The document's `version` must match; the matching snapshot is
  * loaded and nothing else. Pass an absolute path (or path thunk) to validate
  * against a spec that lives outside this package — the pin check is skipped.
+ *
+ * Optional `afterSchema` checks run only after JSON Schema succeeds.
+ * `fileOptions` is applied by {@link FileValidator.validateFile}.
  */
 export class SpecValidator extends FileValidator {
   readonly #specRef: SpecRef | null;
   readonly #resolveFixedPath: SpecPathFn | null;
   readonly #compiled = new Map<string, ValidateFn>();
+  readonly #afterSchema: readonly AfterSchemaFn[];
 
-  constructor(specPath: SpecPathSource) {
-    super();
+  constructor(
+    specPath: SpecPathSource,
+    afterSchema: AfterSchemaFn | readonly AfterSchemaFn[] = [],
+    fileOptions?: FileOptionsFn,
+  ) {
+    super(fileOptions);
+    this.#afterSchema = Array.isArray(afterSchema) ? afterSchema : [afterSchema];
     if (isSpecRef(specPath)) {
       this.#specRef = specPath;
       this.#resolveFixedPath = null;
@@ -179,15 +218,16 @@ export class SpecValidator extends FileValidator {
   }
 
   protected async check(
-    { doc, lineCounter, data }: ParsedYaml,
+    parsed: ParsedYaml,
     _text: string,
-    _options?: ValidateOptions,
+    options?: ValidateOptions,
   ): Promise<SpecValidationResult> {
+    const { doc, lineCounter, data } = parsed;
     const resolved = await this.#resolvePath(data, doc, lineCounter);
     if (!("path" in resolved)) return resolved;
 
     const validate = await this.#compiledSpec(resolved.path);
-    if (validate(data)) return { valid: true, errors: [] };
+    if (validate(data)) return firstFailure(this.#afterSchema, parsed, options);
 
     return {
       valid: false,

@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "vitest";
-import { memoryReader } from "../src/deterministic-reader.ts";
+import { memoryReader } from "../deterministic-reader.ts";
 import {
   DATASOURCE_TYPES_YAML,
   ROUTES_YAML,
   SERVICES_YAML,
   VIEW_TYPES_YAML,
-} from "../src/parser/specification.ts";
-import { DeterministicParser } from "../src/parser/specification-parser.ts";
+} from "../specification.ts";
+import { DeterministicParser } from "../parser/specification-parser.ts";
 
 const serviceClassName = (entity: string) => `${entity}_service`;
 

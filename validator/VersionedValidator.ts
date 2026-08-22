@@ -5,6 +5,7 @@ import {
   errorFromUnknown,
   FileValidator,
   versionFail,
+  type FileOptionsFn,
   type ParsedYaml,
 } from "./SpecValidator.ts";
 import type { SpecValidationResult, ValidateOptions } from "./types.ts";
@@ -41,15 +42,15 @@ async function loadEngine(exportName: string, version: string): Promise<Engine> 
 
 /**
  * Public facade: read `version` from the document (required semver), load
- * that version's engine (`src/validators/` for the live version, or
+ * that version's engine (`validators/` for the live version, or
  * `versions/<semver>/validators/`), and delegate. Missing or unknown
  * versions fail before an engine is constructed.
  */
 export class VersionedValidator extends FileValidator {
   readonly #exportName: string;
 
-  constructor(exportName: string) {
-    super();
+  constructor(exportName: string, fileOptions?: FileOptionsFn) {
+    super(fileOptions);
     this.#exportName = exportName;
   }
 
@@ -73,40 +74,19 @@ export class VersionedValidator extends FileValidator {
 
 export class DatasourceTypesValidator extends VersionedValidator {
   constructor() {
-    super("DatasourceTypesValidator");
-  }
-
-  protected async optionsForFile(
-    path: string,
-    options?: ValidateOptions,
-  ): Promise<ValidateOptions | undefined> {
-    return withIncludeFilePath(path, options);
+    super("DatasourceTypesValidator", withIncludeFilePath);
   }
 }
 
 export class ViewTypesValidator extends VersionedValidator {
   constructor() {
-    super("ViewTypesValidator");
-  }
-
-  protected async optionsForFile(
-    path: string,
-    options?: ValidateOptions,
-  ): Promise<ValidateOptions | undefined> {
-    return withIncludeFilePath(path, options);
+    super("ViewTypesValidator", withIncludeFilePath);
   }
 }
 
 export class RoutesValidator extends VersionedValidator {
   constructor() {
-    super("RoutesValidator");
-  }
-
-  protected async optionsForFile(
-    path: string,
-    options?: ValidateOptions,
-  ): Promise<ValidateOptions | undefined> {
-    return withIncludeFilePath(path, options);
+    super("RoutesValidator", withIncludeFilePath);
   }
 }
 
@@ -118,14 +98,7 @@ export class RoutesApiValidator extends VersionedValidator {
 
 export class ServicesValidator extends VersionedValidator {
   constructor() {
-    super("ServicesValidator");
-  }
-
-  protected async optionsForFile(
-    path: string,
-    options?: ValidateOptions,
-  ): Promise<ValidateOptions | undefined> {
-    return withIncludeFilePath(path, options);
+    super("ServicesValidator", withIncludeFilePath);
   }
 }
 
@@ -137,13 +110,6 @@ export class FrontendBindingsValidator extends VersionedValidator {
 
 export class DatasourceSeedsValidator extends VersionedValidator {
   constructor() {
-    super("DatasourceSeedsValidator");
-  }
-
-  protected async optionsForFile(
-    path: string,
-    options?: ValidateOptions,
-  ): Promise<ValidateOptions | undefined> {
-    return withSiblingDatasourceTypes(path, options);
+    super("DatasourceSeedsValidator", withSiblingDatasourceTypes);
   }
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "vitest";
-import { fromSettings } from "../src/settings.ts";
+import { fromSettings } from "../settings.ts";
 
 describe("fromSettings", () => {
   it("defaults schemaVersion to 1.0 and createIndex on", () => {

@@ -3,7 +3,7 @@ import { describe, it } from "vitest";
 import {
   compileRoutesFilter,
   compileServicesFilter,
-} from "../src/parser/compile-filter.ts";
+} from "../parser/compile-filter.ts";
 
 const cand = (name: string, kind: string, inheritsNamespace = "") => ({
   name,

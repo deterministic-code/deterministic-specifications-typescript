@@ -6,8 +6,8 @@ import {
   HEALTH_ROUTE_PATH,
   HEALTH_SERVICE_METHOD,
   HEALTH_SERVICE_NAME,
-} from "../src/ensure-health.ts";
-import { Deterministic, type IDeterministic } from "../src/parser/deterministic.ts";
+} from "../ensure-health.ts";
+import { Deterministic, type IDeterministic } from "../deterministic.ts";
 
 const empty = (): IDeterministic =>
   new Deterministic({
