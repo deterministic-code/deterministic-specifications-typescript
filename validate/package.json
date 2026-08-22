@@ -1,0 +1,51 @@
+{
+  "name": "@deterministic-code/deterministic-specifications",
+  "version": "0.1.0",
+  "description": "Strict TypeScript validators for the deterministic YAML contract (one validator per spec).",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "npm run build:dts && npm run build:js && npm run build:engines",
+    "build:dts": "tsc -p tsconfig.dts.json",
+    "build:js": "esbuild src/index.ts --bundle --format=esm --platform=node --packages=external --outfile=dist/index.js",
+    "build:engines": "esbuild src/validators/engines.ts --bundle --format=esm --platform=node --packages=external --outfile=src/validators/engines.js",
+    "prepack": "npm run build",
+    "pretest": "npm run build:js && npm run build:engines",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest",
+    "generate:invalid-samples": "node --experimental-strip-types test/generate-invalid.ts"
+  },
+  "dependencies": {
+    "ajv": "^8.18.0",
+    "yaml": "^2.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@vitest/coverage-v8": "^2.1.9",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.0",
+    "vitest": "^2.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deterministic-code/deterministic-specifications-typescript.git",
+    "directory": "validate"
+  },
+  "engines": {
+    "node": ">=22.18"
+  }
+}

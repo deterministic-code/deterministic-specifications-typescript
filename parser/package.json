@@ -1,0 +1,48 @@
+{
+  "name": "@deterministic-code/deterministic-specifications-parser",
+  "version": "0.1.0",
+  "description": "YAML specification parser for the deterministic contract.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/specification-parser.d.ts",
+      "import": "./dist/specification-parser.js"
+    },
+    "./specification": {
+      "types": "./dist/specification.d.ts",
+      "import": "./dist/specification.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "pluralize": "^8.0.0",
+    "yaml": "^2.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/pluralize": "^0.0.33",
+    "@vitest/coverage-v8": "^2.1.9",
+    "typescript": "^5.8.0",
+    "vitest": "^2.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deterministic-code/deterministic-specifications-typescript.git",
+    "directory": "parser"
+  },
+  "engines": {
+    "node": ">=22.18"
+  }
+}
