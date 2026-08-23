@@ -242,6 +242,7 @@ class Parser {
       const kind = typeKind(node);
       const mapping = mappingOf(node);
       const removeFields = node.strings("remove_fields");
+      const ids = node.strings("ids");
       return {
         name,
         tags: node.strings("tags"),
@@ -251,6 +252,7 @@ class Parser {
         ...(kind === "one_of" ? { oneOf: node.strings("one_of") } : {}),
         ...(mapping ? { mapping } : {}),
         ...(removeFields.length > 0 ? { removeFields } : {}),
+        ...(ids.length > 0 ? { ids } : {}),
         fields: node.namedList("fields").map(({ name: fname, node: fnode }) =>
           this.#readField(fname, fnode),
         ),
@@ -271,6 +273,7 @@ class Parser {
       base: parsed.base,
       isArray: parsed.isArray,
       isNullable: node.bool("is_nullable"),
+      ...(node.bool("is_id") ? { isId: true } : {}),
       ...(size !== undefined ? { size } : {}),
       ...(minSize !== undefined ? { minSize } : {}),
       ...(references !== undefined ? { references } : {}),

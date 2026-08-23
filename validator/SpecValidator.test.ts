@@ -88,6 +88,14 @@ describe("yamlErrorOffset / resolveAjvCtor / formatAjvError / errorFromUnknown",
       },
       "/x must NOT have additional properties",
     ],
+    [
+      {
+        keyword: "not",
+        instancePath: "/types/0/person/fields/0/id/is_id",
+        message: "must NOT be valid",
+      },
+      "/types/0/person/fields/0/id/is_id ids and is_id are mutually exclusive",
+    ],
   ] as const)("formatAjvError %#", (error, expected) => {
     expect(formatAjvError(error)).toBe(expected);
   });

@@ -100,6 +100,9 @@ function ajvParamSuffix(params?: Record<string, unknown>): string {
 
 export function formatAjvError(e: AjvError): string {
   const where = e.instancePath || "(root)";
+  if (e.keyword === "not" && e.instancePath.endsWith("/is_id")) {
+    return `${where} ids and is_id are mutually exclusive`;
+  }
   return `${where} ${e.message}${ajvParamSuffix(e.params)}`;
 }
 

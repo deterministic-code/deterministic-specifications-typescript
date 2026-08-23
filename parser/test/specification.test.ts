@@ -54,6 +54,116 @@ describe("specification helpers", () => {
     );
   });
 
+  it("falls back to id when a type has no identity", () => {
+    assert.equal(
+      primaryKeyColumn(
+        undefined,
+        shaped("note", [
+          {
+            name: "body",
+            type: "string",
+            kind: "primitive",
+            base: "string",
+            isArray: false,
+            isNullable: false,
+          },
+        ]),
+      ),
+      "id",
+    );
+  });
+
+  it("takes primaryKeyColumn from is_id or ids", () => {
+    assert.equal(
+      primaryKeyColumn(
+        undefined,
+        shaped(
+          "person",
+          [
+            {
+              name: "code",
+              type: "integer",
+              kind: "primitive",
+              base: "integer",
+              isArray: false,
+              isNullable: false,
+              isId: true,
+            },
+          ],
+          { inherits: "set" },
+        ),
+      ),
+      "code",
+    );
+    assert.equal(
+      primaryKeyColumn(
+        undefined,
+        shaped(
+          "link",
+          [
+            {
+              name: "left_id",
+              type: "integer",
+              kind: "primitive",
+              base: "integer",
+              isArray: false,
+              isNullable: false,
+            },
+            {
+              name: "right_id",
+              type: "integer",
+              kind: "primitive",
+              base: "integer",
+              isArray: false,
+              isNullable: false,
+            },
+          ],
+          { ids: ["left_id", "right_id"] },
+        ),
+      ),
+      "left_id",
+    );
+  });
+
+  it("includes authored identity fields in unique lookups", () => {
+    const type = shaped(
+      "person",
+      [
+        {
+          name: "code",
+          type: "integer",
+          kind: "primitive",
+          base: "integer",
+          isArray: false,
+          isNullable: false,
+          isId: true,
+        },
+        {
+          name: "email",
+          type: "string",
+          kind: "primitive",
+          base: "string",
+          isArray: false,
+          isNullable: false,
+          size: 256,
+        },
+      ],
+      { inherits: "set" },
+    );
+    assert.deepEqual(
+      uniqueLookupFields(type, {
+        name: "person",
+        fields: [{ name: "email", isUnique: true }],
+        indexes: [],
+        uniqueIndexFields: [],
+      }),
+      [
+        { field: "code", type: "integer" },
+        { field: "email", type: "string", size: 256 },
+      ],
+    );
+  });
+
   it("collects unique lookup fields from the datasource overlay", () => {
     const type = shaped("user", [
       {
@@ -211,6 +321,151 @@ describe("specification helpers", () => {
       expanded[1]?.fields.map((f) => f.name),
       ["id", "email", "display_name"],
     );
+  });
+
+  it("does not inject id when a set authors is_id or ids", () => {
+    const expanded = expandTypes(
+      [
+        shaped(
+          "person",
+          [
+            {
+              name: "code",
+              type: "integer",
+              kind: "primitive",
+              base: "integer",
+              isArray: false,
+              isNullable: false,
+              isId: true,
+            },
+            {
+              name: "email",
+              type: "string",
+              kind: "primitive",
+              base: "string",
+              isArray: false,
+              isNullable: false,
+            },
+          ],
+          { kind: "inherit", inherits: "set" },
+        ),
+        shaped(
+          "link",
+          [
+            {
+              name: "left_id",
+              type: "integer",
+              kind: "primitive",
+              base: "integer",
+              isArray: false,
+              isNullable: false,
+            },
+            {
+              name: "right_id",
+              type: "integer",
+              kind: "primitive",
+              base: "integer",
+              isArray: false,
+              isNullable: false,
+            },
+          ],
+          { kind: "inherit", inherits: "set", ids: ["left_id", "right_id"] },
+        ),
+      ],
+      "integer",
+    );
+    assert.deepEqual(
+      expanded[0]?.fields.map((f) => f.name),
+      ["code", "email"],
+    );
+    assert.equal(expanded[0]?.fields[0]?.isId, true);
+    assert.deepEqual(
+      expanded[1]?.fields.map((f) => f.name),
+      ["left_id", "right_id"],
+    );
+    assert.deepEqual(expanded[1]?.ids, ["left_id", "right_id"]);
+  });
+
+  it("does not copy ids from an unknown parent or an is_id parent", () => {
+    const expanded = expandTypes(
+      [
+        shaped(
+          "person",
+          [
+            {
+              name: "code",
+              type: "integer",
+              kind: "primitive",
+              base: "integer",
+              isArray: false,
+              isNullable: false,
+              isId: true,
+            },
+          ],
+          { kind: "inherit", inherits: "set" },
+        ),
+        shaped(
+          "alias",
+          [],
+          { kind: "inherit", inherits: "person" },
+        ),
+        shaped("orphan", [], { kind: "inherit", inherits: "ghost" }),
+      ],
+      "integer",
+    );
+    assert.equal(expanded.find((t) => t.name === "alias")?.ids, undefined);
+    assert.equal(expanded.find((t) => t.name === "orphan")?.ids, undefined);
+  });
+
+  it("inherits composite ids from the parent type", () => {
+    const expanded = expandTypes(
+      [
+        shaped(
+          "link",
+          [
+            {
+              name: "left_id",
+              type: "integer",
+              kind: "primitive",
+              base: "integer",
+              isArray: false,
+              isNullable: false,
+            },
+            {
+              name: "right_id",
+              type: "integer",
+              kind: "primitive",
+              base: "integer",
+              isArray: false,
+              isNullable: false,
+            },
+          ],
+          { kind: "inherit", inherits: "set", ids: ["left_id", "right_id"] },
+        ),
+        shaped(
+          "tagged_link",
+          [
+            {
+              name: "tag",
+              type: "string",
+              kind: "primitive",
+              base: "string",
+              isArray: false,
+              isNullable: false,
+            },
+          ],
+          { kind: "inherit", inherits: "link" },
+        ),
+      ],
+      "integer",
+    );
+    const tagged = expanded.find((t) => t.name === "tagged_link");
+    assert.deepEqual(tagged?.ids, ["left_id", "right_id"]);
+    assert.deepEqual(tagged?.fields.map((f) => f.name), [
+      "left_id",
+      "right_id",
+      "tag",
+    ]);
   });
 
   it("leaves one_of types without merged fields", () => {

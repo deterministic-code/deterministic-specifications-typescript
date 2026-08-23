@@ -20,6 +20,7 @@ export type TypeField = {
   base: string;
   isArray: boolean;
   isNullable: boolean;
+  isId?: boolean;
   size?: number | [number, number] | "unlimited";
   minSize?: number;
   references?: string | [string, string];
@@ -38,6 +39,7 @@ export type Type = {
   oneOf?: string[];
   mapping?: Record<string, string>;
   removeFields?: string[];
+  ids?: string[];
   fields: TypeField[];
 };
 
@@ -193,15 +195,25 @@ const ID_FIELD_TYPE: Record<string, string> = {
 export const inheritedIdType = (idType: string): string =>
   ID_FIELD_TYPE[idType] ?? "number";
 
-export const primaryKeyColumn = (
-  table: DatasourceTable | undefined,
-  type?: Type,
-): string => {
-  const fixed = table?.fields.find((f) => f.isFixedId);
-  if (fixed) return fixed.name;
-  if (type?.inherits === "set") return "id";
-  return "id";
+type IdentityType = Pick<Type, "inherits" | "fields" | "ids">;
+
+export const hasAuthoredIdentity = (type: IdentityType): boolean =>
+  (type.ids !== undefined && type.ids.length > 0) ||
+  type.fields.some((f) => f.isId === true);
+
+export const identityColumns = (type?: IdentityType): string[] => {
+  if (!type) return ["id"];
+  if (type.ids !== undefined && type.ids.length > 0) return [...type.ids];
+  const marked = type.fields.filter((f) => f.isId === true).map((f) => f.name);
+  if (marked.length > 0) return marked;
+  if (type.inherits === "set") return ["id"];
+  return [];
 };
+
+export const primaryKeyColumn = (
+  _table: DatasourceTable | undefined,
+  type?: Type,
+): string => identityColumns(type)[0] ?? "id";
 
 export const uniqueLookupFields = (
   type: Type,
@@ -217,9 +229,7 @@ export const uniqueLookupFields = (
       ...(typeof f?.size === "number" ? { size: f.size } : {}),
     });
   };
-  if (type.inherits === "set" || table?.fields.some((f) => f.isFixedId)) {
-    add(primaryKeyColumn(table, type));
-  }
+  for (const name of identityColumns(type)) add(name);
   for (const overlay of table?.fields ?? []) {
     if (overlay.isUnique) add(overlay.name);
   }
@@ -291,7 +301,10 @@ export const expandTypes = (types: Type[], idType: string): Type[] => {
     stack.add(name);
     let inherited: TypeField[] = [];
     if (type.kind === "inherit" && type.inherits) {
-      inherited = resolve(type.inherits, stack);
+      inherited =
+        type.inherits === "set" && hasAuthoredIdentity(type)
+          ? []
+          : resolve(type.inherits, stack);
     } else if (type.kind === "union") {
       for (const member of type.union ?? []) {
         inherited = [...inherited, ...resolve(member, stack)];
@@ -306,11 +319,35 @@ export const expandTypes = (types: Type[], idType: string): Type[] => {
     return merged;
   };
 
-  return types.map((type) => ({
-    ...type,
-    fields:
-      type.kind === "one_of" ? type.fields : resolve(type.name, new Set()),
-  }));
+  const resolveIds = (name: string, stack: Set<string>): string[] | undefined => {
+    if (stack.has(name)) return undefined;
+    const type = byName.get(name);
+    if (!type) return undefined;
+    if (type.ids !== undefined && type.ids.length > 0) return type.ids;
+    if (type.fields.some((f) => f.isId === true)) return undefined;
+    if (
+      type.kind === "inherit" &&
+      type.inherits &&
+      type.inherits !== "set" &&
+      type.inherits !== "dictionary"
+    ) {
+      stack.add(name);
+      const ids = resolveIds(type.inherits, stack);
+      stack.delete(name);
+      return ids;
+    }
+    return undefined;
+  };
+
+  return types.map((type) => {
+    const ids = type.ids ?? resolveIds(type.name, new Set());
+    return {
+      ...type,
+      ...(ids !== undefined && ids.length > 0 ? { ids } : {}),
+      fields:
+        type.kind === "one_of" ? type.fields : resolve(type.name, new Set()),
+    };
+  });
 };
 
 export const typeHasTag = (type: Type, tag: string): boolean =>
