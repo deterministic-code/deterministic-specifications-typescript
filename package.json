@@ -27,6 +27,7 @@
   ],
   "scripts": {
     "prepare": "npm run build",
+    "test": "npm test --prefix parser && npm test --prefix validator",
     "build": "npm run build:validator && npm run build:engines && npm run build:parser",
     "build:validator": "esbuild validator/index.ts --bundle --format=esm --platform=node --packages=external --outfile=validator/dist/index.js",
     "build:engines": "esbuild validator/validators/engines.ts --bundle --format=esm --platform=node --packages=external --outfile=validator/validators/engines.js",

@@ -88,7 +88,7 @@ describe("parser coverage", () => {
     );
   });
 
-  it("reports typeHasTag and uniqueLookupFields for is_fixed_id", () => {
+  it("reports typeHasTag and uniqueLookupFields for authored identity", () => {
     const type = shaped("user", {
       fields: [
         {
@@ -98,6 +98,7 @@ describe("parser coverage", () => {
           base: "string",
           isArray: false,
           isNullable: false,
+          isId: true,
         },
       ],
     });

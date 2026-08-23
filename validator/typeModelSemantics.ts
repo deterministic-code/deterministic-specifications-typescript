@@ -20,8 +20,13 @@ type TypeInfo = {
   mappingPath?: string;
   removeFields?: string[];
   removeFieldsPath?: string;
+  ids?: string[];
+  idFields: string[];
   fields: Map<string, string>;
 };
+
+const hasAuthoredIdentity = (info: TypeInfo): boolean =>
+  (info.ids !== undefined && info.ids.length > 0) || info.idFields.length > 0;
 
 function typeKind(def: Record<string, unknown>): TypeKind {
   if (typeof def.inherits === "string") return "inherit";
@@ -66,6 +71,7 @@ function collectTypes(
     const def = asRecord(pair.body);
     if (!def) return;
     const fields = new Map<string, string>();
+    const idFields: string[] = [];
     const fieldList = def.fields;
     if (Array.isArray(fieldList)) {
       const seenFields = new Set<string>();
@@ -86,6 +92,7 @@ function collectTypes(
           return;
         }
         fields.set(fp.key, fieldPath);
+        if (asRecord(fp.body)?.is_id === true) idFields.push(fp.key);
       });
     }
     types.set(pair.key, {
@@ -99,6 +106,8 @@ function collectTypes(
       removeFields: stringList(def.remove_fields),
       removeFieldsPath:
         def.remove_fields !== undefined ? `${path}/remove_fields` : undefined,
+      ids: stringList(def.ids),
+      idFields,
       fields,
     });
   });
@@ -118,9 +127,11 @@ function inheritedNames(
   stack.add(name);
   const names = new Set<string>();
   if (info.kind === "inherit" && info.inherits) {
-    const parent = inheritedNames(info.inherits, types, stack);
-    if ("cycle" in parent) return parent;
-    for (const n of parent) names.add(n);
+    if (!(info.inherits === "set" && hasAuthoredIdentity(info))) {
+      const parent = inheritedNames(info.inherits, types, stack);
+      if ("cycle" in parent) return parent;
+      for (const n of parent) names.add(n);
+    }
   }
   if (info.kind === "union") {
     for (const member of info.union!) {
@@ -183,6 +194,7 @@ function checkComposition(
 
     const available = new Set<string>();
     for (const src of sources) {
+      if (src === "set" && hasAuthoredIdentity(info)) continue;
       const part = inheritedNames(src, types, new Set([name]));
       if ("cycle" in part) {
         errors.push(
@@ -329,11 +341,72 @@ function checkDecimalSizes(parsed: ParsedYaml): SpecValidationResult["errors"] {
   return errors;
 }
 
+function checkIdentity(
+  parsed: ParsedYaml,
+  types: Map<string, TypeInfo>,
+): SpecValidationResult["errors"] {
+  const errors: SpecValidationResult["errors"] = [];
+  const list = asRecord(parsed.data)?.types;
+  if (!Array.isArray(list)) return errors;
+
+  list.forEach((entry, ti) => {
+    const pair = singleKey(entry);
+    if (!pair) return;
+    const def = asRecord(pair.body);
+    if (!def) return;
+    const path = `/types/${ti}/${pair.key}`;
+    const idFields: string[] = [];
+    const fields = def.fields;
+    if (Array.isArray(fields)) {
+      fields.forEach((field, fi) => {
+        const fp = singleKey(field);
+        if (!fp) return;
+        if (asRecord(fp.body)?.is_id !== true) return;
+        const fieldPath = `${path}/fields/${fi}/${fp.key}/is_id`;
+        if (idFields.length > 0) {
+          errors.push(
+            specErr(
+              parsed,
+              fieldPath,
+              `is_id: true may appear on at most one field on ${pair.key}`,
+            ),
+          );
+        }
+        idFields.push(fieldPath);
+      });
+    }
+    if (Array.isArray(def.ids) && idFields.length > 0) {
+      errors.push(
+        specErr(
+          parsed,
+          `${path}/ids`,
+          `ids and is_id are mutually exclusive on ${pair.key}`,
+        ),
+      );
+    }
+    if (!Array.isArray(def.ids)) return;
+    const known = fieldNamesOf(pair.key, types);
+    def.ids.forEach((name, i) => {
+      if (typeof name !== "string") return;
+      if (known.has(name)) return;
+      errors.push(
+        specErr(
+          parsed,
+          `${path}/ids/${i}`,
+          `ids '${name}' is not a field on ${pair.key}`,
+        ),
+      );
+    });
+  });
+  return errors;
+}
+
 export function checkTypeModel(parsed: ParsedYaml): SpecValidationResult {
   const { types, errors } = collectTypes(parsed);
   errors.push(...checkComposition(parsed, types));
   errors.push(...checkReferences(parsed, types));
   errors.push(...checkDecimalSizes(parsed));
+  errors.push(...checkIdentity(parsed, types));
   return errors.length === 0
     ? { valid: true, errors: [] }
     : { valid: false, errors };
@@ -361,6 +434,13 @@ function typeInfoFromEntry(entry: unknown): { name: string; info: TypeInfo } | n
       oneOf: stringList(def.one_of),
       mapping: mappingOf(def),
       removeFields: stringList(def.remove_fields),
+      ids: stringList(def.ids),
+      idFields: Array.isArray(def.fields)
+        ? def.fields.flatMap((field) => {
+            const fp = singleKey(field);
+            return fp && asRecord(fp.body)?.is_id === true ? [fp.key] : [];
+          })
+        : [],
       fields,
     },
   };

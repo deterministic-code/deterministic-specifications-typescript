@@ -159,6 +159,86 @@ types:
     expect(result.errors.some((e) => /right_id/.test(e.message))).toBe(true);
   });
 
+  test("rejects two is_id fields and ids mixed with is_id", async () => {
+    const two = await validator().validate(doc(`types:
+  - person:
+      inherits: set
+      fields:
+        - id:
+            type: integer
+            is_id: true
+        - i2:
+            type: integer
+            is_id: true
+`));
+    expect(two.valid).toBe(false);
+    expect(two.errors.some((e) => /at most one/.test(e.message))).toBe(true);
+
+    const mixed = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - link:
+      ids: [left_id, right_id]
+      fields:
+        - left_id:
+            type: integer
+            is_id: true
+        - right_id:
+            type: integer
+`),
+    );
+    expect(mixed.valid).toBe(false);
+    expect(mixed.errors.some((e) => /mutually exclusive/.test(e.message))).toBe(
+      true,
+    );
+  });
+
+  test("does not treat injected id as present when a set authors identity", async () => {
+    const byId = await validator().validate(doc(`types:
+  - person:
+      inherits: set
+      fields:
+        - code:
+            type: integer
+            is_id: true
+      remove_fields: [id]
+`));
+    expect(byId.valid).toBe(false);
+    expect(byId.errors.some((e) => /remove_fields 'id'/.test(e.message))).toBe(
+      true,
+    );
+
+    const byIds = await validator().validate(doc(`types:
+  - link:
+      inherits: set
+      ids: [left_id, right_id]
+      fields:
+        - left_id:
+            type: integer
+        - right_id:
+            type: integer
+      remove_fields: [id]
+`));
+    expect(byIds.valid).toBe(false);
+    expect(byIds.errors.some((e) => /remove_fields 'id'/.test(e.message))).toBe(
+      true,
+    );
+  });
+
+  test("rejects ids that are not fields on the type", async () => {
+    const result = await validator().validate(doc(`types:
+  - link:
+      ids: [left_id, ghost]
+      fields:
+        - left_id:
+            type: integer
+        - right_id:
+            type: integer
+`));
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]?.message).toMatch(/ids 'ghost' is not a field/);
+  });
+
   test("rejects decimal scale greater than precision", async () => {
     const result = await validator().validate(doc(`types:
   - item:
@@ -193,6 +273,10 @@ types:
         - role:
             type: role
             references: [1]
+        - skip:
+            type: integer
+            is_id: false
+      ids: [1, email]
 `),
     );
     expect(skipped.valid).toBe(true);

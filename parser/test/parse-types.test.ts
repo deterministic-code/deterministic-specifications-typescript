@@ -67,6 +67,45 @@ describe("parse types.yaml", () => {
     assert.deepEqual(result?.oneOf, ["person", "phone_contact"]);
   });
 
+  it("reads is_id and ids and skips injected id", async () => {
+    const det = await parse({
+      "types.yaml": `types:
+  - person:
+      tags: [datasource_type]
+      inherits: set
+      fields:
+        - code:
+            type: integer
+            is_id: true
+        - email:
+            type: string
+  - link:
+      tags: [datasource_type]
+      inherits: set
+      ids: [left_id, right_id]
+      fields:
+        - left_id:
+            type: integer
+        - right_id:
+            type: integer
+  - user:
+      tags: [datasource_type]
+      inherits: set
+      fields:
+        - email:
+            type: string
+`,
+    });
+    const person = det.expandedTypes.find((t) => t.name === "person");
+    assert.deepEqual(person?.fields.map((f) => f.name), ["code", "email"]);
+    assert.equal(person?.fields[0]?.isId, true);
+    const link = det.expandedTypes.find((t) => t.name === "link");
+    assert.deepEqual(link?.ids, ["left_id", "right_id"]);
+    assert.deepEqual(link?.fields.map((f) => f.name), ["left_id", "right_id"]);
+    const user = det.expandedTypes.find((t) => t.name === "user");
+    assert.deepEqual(user?.fields.map((f) => f.name), ["id", "email"]);
+  });
+
   it("parses composite references", async () => {
     const det = await parse({
       "types.yaml": `types:
