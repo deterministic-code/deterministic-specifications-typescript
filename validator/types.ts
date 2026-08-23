@@ -16,10 +16,14 @@ export interface SpecValidationResult {
 }
 
 export interface ValidateOptions {
-  /** Companion `datasource_types.yaml` text. Required for non-empty seeds. */
-  datasourceTypes?: string;
-  /** Path to companion `datasource_types.yaml`. Ignored when `datasourceTypes` is set. */
-  datasourceTypesPath?: string;
+  /** Companion `types.yaml` text. Required for non-empty seeds. */
+  types?: string;
+  /** Path to companion `types.yaml`. Ignored when `types` is set. */
+  typesPath?: string;
+  /** Companion `datasource.yaml` text. Required for non-empty seeds. */
+  datasource?: string;
+  /** Path to companion `datasource.yaml`. Ignored when `datasource` is set. */
+  datasourcePath?: string;
   /** Absolute path of the document being validated. Set by `validateFile`. */
   includeFilePath?: string;
   /** Directory used to resolve `file:` includes. Set by `validateFile`. */

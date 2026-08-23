@@ -87,7 +87,7 @@ async function loadChild(
 }
 
 /**
- * Walk `file:` includes from a datasource_types document and report cycles,
+ * Walk `file:` includes from a types/datasource/routes/services document and report cycles,
  * missing files, and unreadable / non-mapping targets. Remote includes
  * (`id` / `uuid` / `user_id`+`name`) are skipped — they cannot be followed
  * without a resolver. No-ops when neither `includeFilePath` nor
@@ -100,7 +100,7 @@ export async function checkIncludeCycles(
   const rootPath = options?.includeFilePath
     ? resolve(options.includeFilePath)
     : options?.includeBasePath
-      ? resolve(options.includeBasePath, "datasource_types.yaml")
+      ? resolve(options.includeBasePath, "types.yaml")
       : null;
   if (!rootPath) return { valid: true, errors: [] };
 

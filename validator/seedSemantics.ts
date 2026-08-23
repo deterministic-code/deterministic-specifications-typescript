@@ -7,11 +7,11 @@ import type {
   ValidateOptions,
 } from "./types.ts";
 import type { ParsedYaml } from "./SpecValidator.ts";
+import { indexTypeFields } from "./typeModelSemantics.ts";
 
 const AUTO_COLUMNS = new Set(["id", "created", "updated"]);
 
 type FieldDef = Record<string, unknown>;
-
 type TableIndex = Map<string, Map<string, FieldDef>>;
 
 const STRING_TYPES = new Set([
@@ -46,23 +46,30 @@ const UNSIGNED_TYPES = new Set([
   "unsignedsmallinteger",
 ]);
 
-export async function withSiblingDatasourceTypes(
+async function readIfPresent(path: string): Promise<string | undefined> {
+  try {
+    return await readFile(path, "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+export async function withSiblingCompanions(
   seedsPath: string,
   options?: ValidateOptions,
 ): Promise<ValidateOptions> {
-  if (options?.datasourceTypes !== undefined) return { ...options };
-  if (options?.datasourceTypesPath) {
-    return {
-      ...options,
-      datasourceTypes: await readFile(options.datasourceTypesPath, "utf8"),
-    };
-  }
-  const sibling = join(dirname(seedsPath), "datasource_types.yaml");
-  try {
-    return { ...options, datasourceTypes: await readFile(sibling, "utf8") };
-  } catch {
-    return { ...options };
-  }
+  const dir = dirname(seedsPath);
+  const types =
+    options?.types ??
+    (options?.typesPath
+      ? await readFile(options.typesPath, "utf8")
+      : await readIfPresent(join(dir, "types.yaml")));
+  const datasource =
+    options?.datasource ??
+    (options?.datasourcePath
+      ? await readFile(options.datasourcePath, "utf8")
+      : await readIfPresent(join(dir, "datasource.yaml")));
+  return { ...options, types, datasource };
 }
 
 function err(
@@ -74,27 +81,15 @@ function err(
   return { line, col, instancePath, message };
 }
 
-function indexTypes(data: unknown): TableIndex {
-  const out: TableIndex = new Map();
+function tableNames(data: unknown): Set<string> {
+  const out = new Set<string>();
   const types = asRecord(data)?.types;
   if (!Array.isArray(types)) return out;
   for (const entry of types) {
     const obj = asRecord(entry);
     if (!obj) continue;
     const name = Object.keys(obj)[0];
-    if (!name) continue;
-    const def = asRecord(obj[name]);
-    const fields = new Map<string, FieldDef>();
-    if (Array.isArray(def?.fields)) {
-      for (const field of def.fields) {
-        const fo = asRecord(field);
-        if (!fo) continue;
-        const fname = Object.keys(fo)[0];
-        if (!fname) continue;
-        fields.set(fname, asRecord(fo[fname]) ?? {});
-      }
-    }
-    out.set(name, fields);
+    if (name) out.add(name);
   }
   return out;
 }
@@ -105,13 +100,15 @@ function isOmittable(def: FieldDef): boolean {
 
 function fieldType(def: FieldDef, tables: TableIndex): string | undefined {
   if (typeof def.type === "string") return def.type;
-  if (typeof def.references !== "string") return undefined;
-  const [table, column] = def.references.split(".");
-  if (!table || !column) return undefined;
-  if (column === "id") return "number";
-  const parent = tables.get(table)?.get(column);
-  if (parent && typeof parent.type === "string") return parent.type;
-  return "number";
+  if (typeof def.references === "string") {
+    const [table, column] = def.references.split(".");
+    if (!table || !column) return undefined;
+    if (column === "id") return "number";
+    const parent = tables.get(table)?.get(column);
+    if (parent && typeof parent.type === "string") return parent.type;
+    return "number";
+  }
+  return undefined;
 }
 
 function typeMessage(fieldTypeName: string): string {
@@ -146,8 +143,11 @@ function seedsAreEmpty(data: unknown): boolean {
 export function checkSeedSemantics(
   parsed: ParsedYaml,
   typesData: unknown,
+  datasourceData?: unknown,
 ): SpecValidationResult {
-  const tables = indexTypes(typesData);
+  const tables = indexTypeFields(typesData);
+  const allowed =
+    datasourceData === undefined ? undefined : tableNames(datasourceData);
   const seeds = asRecord(parsed.data)?.seeds;
   if (!Array.isArray(seeds)) return { valid: true, errors: [] };
 
@@ -168,13 +168,24 @@ export function checkSeedSemantics(
     }
     seenTables.add(tableName);
 
+    if (allowed && !allowed.has(tableName)) {
+      errors.push(
+        err(
+          parsed,
+          tablePath,
+          `unknown type '${tableName}' (not in datasource.yaml)`,
+        ),
+      );
+      return;
+    }
+
     const fields = tables.get(tableName);
     if (!fields) {
       errors.push(
         err(
           parsed,
           tablePath,
-          `unknown type '${tableName}' (not in datasource_types)`,
+          `unknown type '${tableName}' (not in types.yaml)`,
         ),
       );
       return;
@@ -218,9 +229,7 @@ export function checkSeedSemantics(
         const value = row[key];
         if (value === null) {
           if (def.is_nullable !== true) {
-            errors.push(
-              err(parsed, fieldPath, `'${key}' is not nullable`),
-            );
+            errors.push(err(parsed, fieldPath, `'${key}' is not nullable`));
           }
           continue;
         }
@@ -237,7 +246,10 @@ export function checkSeedSemantics(
       }
 
       for (const [name, def] of fields) {
-        if (name in row || isOmittable(def)) continue;
+        if (AUTO_COLUMNS.has(name)) continue;
+        if (name in row || isOmittable(def) || Object.keys(def).length === 0) {
+          continue;
+        }
         errors.push(
           err(
             parsed,
@@ -252,11 +264,11 @@ export function checkSeedSemantics(
   return { valid: errors.length === 0, errors };
 }
 
-export function seedsNeedTypes(data: unknown): boolean {
+export function seedsNeedCompanions(data: unknown): boolean {
   return !seedsAreEmpty(data);
 }
 
-export function companionTypesError(
+export function companionError(
   parsed: ParsedYaml,
   message: string,
 ): SpecValidationResult {

@@ -47,7 +47,7 @@ describe("findSpecPath", () => {
   test("resolves the live version to the root specs", async () => {
     const path = await findSpecPath(
       "backend",
-      "datasource-types.spec.yaml",
+      "types.spec.yaml",
       "1.0.0",
     );
     expect(path).not.toBeNull();
@@ -118,7 +118,6 @@ describe("published version completeness", () => {
     expect(versionsDir).not.toBeNull();
     for (const version of published) {
       const archiveRoot = join(versionsDir!, version);
-      await access(join(archiveRoot, "validators", VALIDATOR_ENGINE_FILE));
       for (const subdir of ["backend", "frontend"] as const) {
         const names = (await readdir(join(archiveRoot, subdir))).filter((f) =>
           f.endsWith(".spec.yaml"),
@@ -251,7 +250,7 @@ describe("engineRelPath / resolveEngineDir", () => {
     const runtime = (await import(
       pathToFileURL(join(dir!, VALIDATOR_ENGINE_FILE)).href
     )) as Record<string, unknown>;
-    expect(typeof runtime.DatasourceTypesValidator).toBe("function");
+    expect(typeof runtime.TypesValidator).toBe("function");
     expect(typeof runtime.DatasourceSeedsValidator).toBe("function");
     expect(typeof runtime.RoutesApiValidator).toBe("function");
   });

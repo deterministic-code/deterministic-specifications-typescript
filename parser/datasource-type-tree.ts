@@ -1,5 +1,5 @@
 import { stringify } from "yaml";
-import type { DatasourceType } from "./specification.ts";
+import type { Type } from "./specification.ts";
 
 export type DatasourceTypeTree = { [name: string]: DatasourceTypeTree };
 
@@ -21,26 +21,31 @@ export type DatasourceTypeHierarchies = {
 
 const ROOT = "root";
 
+const refTargets = (references: string | [string, string]): string[] =>
+  (Array.isArray(references) ? references : [references]).map(
+    (ref) => ref.split(".")[0] ?? "",
+  );
+
 const referencedParents = (
-  type: DatasourceType,
+  type: Type,
   typeNames: ReadonlySet<string>,
 ): string[] => {
   const parents: string[] = [];
   const seen = new Set<string>();
   for (const field of type.fields) {
     if (field.references === undefined) continue;
-    const parent = field.references.split(".")[0];
-    if (
-      parent === undefined ||
-      parent.length === 0 ||
-      parent === type.name ||
-      !typeNames.has(parent) ||
-      seen.has(parent)
-    ) {
-      continue;
+    for (const parent of refTargets(field.references)) {
+      if (
+        parent.length === 0 ||
+        parent === type.name ||
+        !typeNames.has(parent) ||
+        seen.has(parent)
+      ) {
+        continue;
+      }
+      seen.add(parent);
+      parents.push(parent);
     }
-    seen.add(parent);
-    parents.push(parent);
   }
   return parents;
 };
@@ -140,7 +145,7 @@ const buildNode = (
 };
 
 const chosenParents = (
-  types: readonly DatasourceType[],
+  types: readonly Type[],
   multiParent: "first" | "all",
 ): Map<string, readonly string[]> => {
   const typeNames = new Set(types.map((type) => type.name));
@@ -156,7 +161,7 @@ const chosenParents = (
 };
 
 const buildTree = (
-  types: readonly DatasourceType[],
+  types: readonly Type[],
   parentLists: ReadonlyMap<string, readonly string[]>,
 ): DatasourceTypeTree => {
   const names = types.map((type) => type.name);
@@ -178,24 +183,24 @@ const buildTree = (
 };
 
 export const datasourceTypeTree = (
-  types: readonly DatasourceType[],
+  types: readonly Type[],
   options: { multiParent?: "first" | "all" } = {},
 ): DatasourceTypeTree =>
   buildTree(types, chosenParents(types, options.multiParent ?? "first"));
 
 /** Each type appears once; first `references` parent wins. Cycle tops point at root. */
 export const datasourceTypeTreeFirst = (
-  types: readonly DatasourceType[],
+  types: readonly Type[],
 ): DatasourceTypeTree => datasourceTypeTree(types, { multiParent: "first" });
 
 /** A type with several parents is nested under each of them. */
 export const datasourceTypeTreeAll = (
-  types: readonly DatasourceType[],
+  types: readonly Type[],
 ): DatasourceTypeTree => datasourceTypeTree(types, { multiParent: "all" });
 
 /** Child → parent edges. Parentless types point at root; cycles and multi-parent are kept. */
 export const datasourceTypeGraph = (
-  types: readonly DatasourceType[],
+  types: readonly Type[],
 ): DatasourceTypeGraph => {
   const parentLists = chosenParents(types, "all");
   const nodes = [ROOT, ...types.map((type) => type.name)];
@@ -214,7 +219,7 @@ export const datasourceTypeGraph = (
 };
 
 export const datasourceTypeHierarchies = (
-  types: readonly DatasourceType[],
+  types: readonly Type[],
 ): DatasourceTypeHierarchies => ({
   firstParentTree: datasourceTypeTreeFirst(types),
   allParentsTree: datasourceTypeTreeAll(types),
@@ -223,7 +228,7 @@ export const datasourceTypeHierarchies = (
 
 /** Pre-order walk of the first-parent tree (parent before children, authored sibling order). */
 export const datasourceTypeOrder = (
-  types: readonly DatasourceType[],
+  types: readonly Type[],
 ): string[] => {
   const names: string[] = [];
   const walk = (node: DatasourceTypeTree) => {
@@ -241,7 +246,7 @@ export const datasourceTypeOrder = (
  * Does not include `name`. Self-edges and cycles are skipped.
  */
 export const datasourceTypeAncestry = (
-  types: readonly DatasourceType[],
+  types: readonly Type[],
   name: string,
 ): string[] => {
   const parentLists = chosenParents(types, "all");
@@ -262,7 +267,7 @@ export const datasourceTypeAncestry = (
 
 /** Rank by tree order; names that inherit a type sort just after that type. */
 export const compareByDatasourceTypeOrder = (
-  types: readonly DatasourceType[],
+  types: readonly Type[],
   inheritOf: (name: string) => string | null | undefined = () => undefined,
 ): ((a: string, b: string) => number) => {
   const order = datasourceTypeOrder(types);

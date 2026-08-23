@@ -9,16 +9,10 @@ import { resolveSpecPath } from "./resolveSpecPath.ts";
 import { LIVE_VERSION } from "./specVersion.ts";
 import { SpecValidator } from "./SpecValidator.ts";
 
-function schemaTypeNames(schema: {
-  $defs?: Record<string, { properties?: { type?: { const?: string } } }>;
-}): Set<string> {
-  const names = new Set<string>(["reference"]);
-  for (const [key, def] of Object.entries(schema.$defs ?? {})) {
-    if (!key.endsWith("Field")) continue;
-    const konst = def.properties?.type?.const;
-    if (typeof konst === "string") names.add(konst);
-  }
-  return names;
+function catalogIdentifiers(schema: {
+  $defs?: { identifier?: { enum?: string[] } };
+}): string[] {
+  return [...(schema.$defs?.identifier?.enum ?? [])].sort();
 }
 
 describe("fieldTypeCatalog", () => {
@@ -47,12 +41,12 @@ types:
   test("every spec field type has a types.yaml row and vice versa", async () => {
     const schema = parseDocument(
       await readFile(
-        await resolveSpecPath("backend", "datasource-types.spec.yaml", LIVE_VERSION),
+        await resolveSpecPath("backend", "field-types.spec.yaml", LIVE_VERSION),
         "utf8",
       ),
-    ).toJS() as Parameters<typeof schemaTypeNames>[0];
+    ).toJS() as Parameters<typeof catalogIdentifiers>[0];
     const catalog = await loadFieldTypeCatalog(LIVE_VERSION);
-    expect([...catalog.keys()].sort()).toEqual([...schemaTypeNames(schema)].sort());
+    expect([...catalog.keys()].sort()).toEqual(catalogIdentifiers(schema));
   });
 
   test("skips malformed entries and optional catalog fields", () => {
@@ -112,8 +106,8 @@ types:
     );
   });
 
-  test("types.yaml is valid against types.spec.yaml", async () => {
-    const specPath = await resolveSpecPath("backend", "types.spec.yaml", LIVE_VERSION);
+  test("types.yaml is valid against field-types.spec.yaml", async () => {
+    const specPath = await resolveSpecPath("backend", "field-types.spec.yaml", LIVE_VERSION);
     const catalogPath = await resolveSpecPath("backend", "types.yaml", LIVE_VERSION);
     const result = await new SpecValidator(specPath).validate(
       await readFile(catalogPath, "utf8"),
@@ -121,10 +115,10 @@ types:
     expect(result).toEqual({ valid: true, errors: [] });
   });
 
-  test("catalog token regexes match datasource-types.spec.yaml", async () => {
+  test("catalog token regexes match types.spec.yaml", async () => {
     const schema = parseDocument(
       await readFile(
-        await resolveSpecPath("backend", "datasource-types.spec.yaml", LIVE_VERSION),
+        await resolveSpecPath("backend", "types.spec.yaml", LIVE_VERSION),
         "utf8",
       ),
     ).toJS() as {
@@ -135,7 +129,6 @@ types:
         signedIntegerString: { pattern: string };
         unsignedIntegerString: { pattern: string };
         decimalString: { pattern: string };
-        characterField: { properties: { default_value: { pattern: string } } };
       };
     };
     const catalog = await loadFieldTypeCatalog(LIVE_VERSION);
@@ -155,9 +148,6 @@ types:
       schema.$defs.unsignedIntegerString.pattern,
     );
     expect(token("decimal", "Literal")).toBe(schema.$defs.decimalString.pattern);
-    expect(token("character", "Literal")).toBe(
-      schema.$defs.characterField.properties.default_value.pattern,
-    );
   });
 
   test("datetime and uuid expose the symbolic default tokens", async () => {

@@ -2,8 +2,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { DatasourceTypesValidator } from "../VersionedValidator.ts";
-import { DatasourceTypesValidator as Engine } from "./DatasourceTypesValidator.ts";
+import { TypesValidator } from "../VersionedValidator.ts";
+import { TypesValidator as Engine } from "./TypesValidator.ts";
 
 const MINIMAL = `version: 1.0.0
 types:
@@ -14,10 +14,10 @@ types:
             size: 64
 `;
 
-const validator = () => new DatasourceTypesValidator();
+const validator = () => new TypesValidator();
 
 async function withDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
-  const dir = await mkdtemp(join(tmpdir(), "ds-includes-"));
+  const dir = await mkdtemp(join(tmpdir(), "types-includes-"));
   try {
     return await fn(dir);
   } finally {
@@ -25,7 +25,7 @@ async function withDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
   }
 }
 
-describe("DatasourceTypesValidator include cycles", () => {
+describe("TypesValidator include cycles", () => {
   test("validate() does not resolve file includes", async () => {
     const result = await validator().validate(`version: 1.0.0
 includes:
@@ -49,7 +49,7 @@ types:
             size: 32
 `,
       );
-      const path = join(dir, "datasource_types.yaml");
+      const path = join(dir, "types.yaml");
       await writeFile(
         path,
         `version: 1.0.0
@@ -94,7 +94,7 @@ types: []
 
   test("validateFile rejects a missing include file", async () => {
     await withDir(async (dir) => {
-      const path = join(dir, "datasource_types.yaml");
+      const path = join(dir, "types.yaml");
       await writeFile(
         path,
         `version: 1.0.0
@@ -111,7 +111,7 @@ types: []
 
   test("schema errors win over include checks", async () => {
     await withDir(async (dir) => {
-      const path = join(dir, "datasource_types.yaml");
+      const path = join(dir, "types.yaml");
       await writeFile(path, "version: 1.0.0\ntypes: not-a-list\n");
       const result = await validator().validateFile(path);
       expect(result.valid).toBe(false);

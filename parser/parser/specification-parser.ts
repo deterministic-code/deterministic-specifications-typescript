@@ -1,26 +1,24 @@
 import pluralize from "pluralize";
 import type { IDeterministicReader } from "../deterministic-reader.ts";
 import { ensureHealth } from "../ensure-health.ts";
-import { fromSettings } from "../settings.ts";
-import { compileRoutesFilter, compileServicesFilter } from "./compile-filter.ts";
+import { compileTypesFilter } from "./compile-filter.ts";
 import { Deterministic, type IDeterministic } from "../deterministic.ts";
 import {
   DATASOURCE_SEEDS_YAML,
-  DATASOURCE_TYPES_YAML,
-  expandDatasourceTypes,
-  expandViewTypes,
-  inheritedIdType,
+  DATASOURCE_YAML,
+  expandTypes,
   parseFieldType,
+  primaryKeyColumn,
   resolvedProjectIdType,
   ROUTES_YAML,
   SERVICES_YAML,
+  TYPES_YAML,
   uniqueLookupFields,
-  VIEW_TYPES_YAML,
   type CustomRouteEntry,
   type CustomServiceEntry,
-  type DatasourceField,
+  type DatasourceFieldOverlay,
   type DatasourceIndex,
-  type DatasourceType,
+  type DatasourceTable,
   type DirectFkDescriptor,
   type M2mDescriptor,
   type NestedRouteDescriptor,
@@ -30,10 +28,10 @@ import {
   type RouteCandidate,
   type SeedRow,
   type SeedValue,
-  type ServiceByField,
   type ServiceCandidate,
-  type ViewEnrichment,
-  type ViewType,
+  type Type,
+  type TypeField,
+  type TypeKind,
 } from "../specification.ts";
 import { compareByDatasourceTypeOrder } from "../datasource-type-tree.ts";
 import { YamlNode } from "../yaml-node.ts";
@@ -43,57 +41,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 export type { IDeterministic } from "../deterministic.ts";
 
-type RawDatasourceField = {
-  name: string;
-  type: string | undefined;
-  isNullable: boolean;
-  references: string | undefined;
-  isPrimaryKey: boolean;
-  isUnique: boolean;
-  minSize: number | undefined;
-  size: number | undefined;
-  hasDefault: boolean;
-  defaultValue: string | number | boolean | null | undefined;
-};
-
-type RawDatasourceType = {
-  name: string;
-  datasourceType: string | undefined;
-  target: string | null | undefined;
-  optimisticConcurrency: boolean | undefined;
-  fields: RawDatasourceField[];
-  uniqueIndexFields: string[];
-  indexes: DatasourceIndex[];
-  skipMigrations: boolean;
-};
-
-type RawViewField = {
-  name: string;
-  type: string;
-  isNullable: boolean;
-  size: number | undefined;
-  minSize: number | undefined;
-};
-
-type RawView = {
-  name: string;
-  inherits: string | undefined;
-  oneOf: string[] | undefined;
-  omit: string[];
-  fields: RawViewField[];
-  enrichments: ViewEnrichment[];
-};
-
-type DsDirective = {
-  include: string | undefined;
-  filter: string | undefined;
-  autoEnrich: boolean;
-};
-
 type CombinedChildDef = { via?: string; target?: string; route?: string };
 type CombinedRouteDef = {
   route?: string;
-  combined_types?: Array<string | Record<string, CombinedChildDef>>;
+  combines?: Array<string | Record<string, CombinedChildDef>>;
 };
 type ByFieldParsed = {
   entity: string;
@@ -108,14 +59,6 @@ type NormalizedChild = {
 };
 type JunctionMatch = { name: string; parentFk: string; childFk: string };
 
-const DS_PREFIX = "datasource_types.";
-const NON_DERIVABLE = [
-  "_eager_body",
-  "_eager_create_body",
-  "_eager_patch_body",
-  "_eager_row",
-  "_eager_create_row",
-] as const;
 const SHORTHAND_VERB_RE = /^(get|put|delete)_/i;
 const VERB_TO_METHODS: Record<string, string[]> = {
   get: ["GET"],
@@ -157,7 +100,50 @@ const seedCells = (node: YamlNode): Record<string, SeedValue> => {
   return out;
 };
 
-/** Parses deterministic YAML into `IDeterministic`. */
+const typeKind = (node: YamlNode): TypeKind => {
+  if (node.str("inherits") !== undefined) return "inherit";
+  if (Array.isArray(node.child("union").value)) return "union";
+  if (Array.isArray(node.child("one_of").value)) return "one_of";
+  return "shaped";
+};
+
+const mappingOf = (node: YamlNode): Record<string, string> | undefined => {
+  const rec = node.child("mapping").record;
+  if (!rec) return undefined;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(rec)) {
+    if (typeof v === "string") out[k] = v;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+};
+
+const referencesOf = (
+  node: YamlNode,
+): string | [string, string] | undefined => {
+  const raw = node.child("references").value;
+  if (typeof raw === "string") return raw;
+  if (Array.isArray(raw) && raw.length === 2 && raw.every((v) => typeof v === "string")) {
+    return [raw[0] as string, raw[1] as string];
+  }
+  return undefined;
+};
+
+const sizeOf = (
+  node: YamlNode,
+): number | [number, number] | "unlimited" | undefined => {
+  const raw = node.child("size").value;
+  if (raw === "unlimited") return "unlimited";
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  if (
+    Array.isArray(raw) &&
+    raw.length === 2 &&
+    raw.every((v) => typeof v === "number")
+  ) {
+    return [raw[0] as number, raw[1] as number];
+  }
+  return undefined;
+};
+
 export const DeterministicParser = (reader: IDeterministicReader) => {
   const parser = new Parser(reader);
   return {
@@ -184,89 +170,179 @@ class Parser {
       settings["datasource.id_type"] ?? "integer",
     );
     const serviceClassName = opts?.serviceClassName ?? ((entity) => entity);
-    const [hasDs, hasSeeds, hasViews, hasServices, hasRoutes] =
+    const [hasTypes, hasDs, hasSeeds, hasServices, hasRoutes] =
       await Promise.all([
-        reader.exists(DATASOURCE_TYPES_YAML),
+        reader.exists(TYPES_YAML),
+        reader.exists(DATASOURCE_YAML),
         reader.exists(DATASOURCE_SEEDS_YAML),
-        reader.exists(VIEW_TYPES_YAML),
         reader.exists(SERVICES_YAML),
         reader.exists(ROUTES_YAML),
       ]);
-    const [datasourceYaml, seedsYaml, viewYaml, servicesYaml, routesYaml] =
+    const [typesYaml, datasourceYaml, seedsYaml, servicesYaml, routesYaml] =
       await Promise.all([
-        hasDs ? reader.read(DATASOURCE_TYPES_YAML) : Promise.resolve(undefined),
+        hasTypes ? reader.read(TYPES_YAML) : Promise.resolve(undefined),
+        hasDs ? reader.read(DATASOURCE_YAML) : Promise.resolve(undefined),
         hasSeeds
           ? reader.read(DATASOURCE_SEEDS_YAML)
           : Promise.resolve(undefined),
-        hasViews ? reader.read(VIEW_TYPES_YAML) : Promise.resolve(undefined),
         hasServices ? reader.read(SERVICES_YAML) : Promise.resolve(undefined),
         hasRoutes ? reader.read(ROUTES_YAML) : Promise.resolve(undefined),
       ]);
-    const datasources =
+
+    const types =
+      typesYaml !== undefined ? this.#parseTypes(typesYaml) : [];
+    const expandedTypes = expandTypes(types, idType);
+    const datasource =
       datasourceYaml !== undefined
-        ? this.#parseDatasourceTypes({ yaml: datasourceYaml, idType })
+        ? this.#parseDatasource(datasourceYaml, expandedTypes)
         : [];
     const seeds =
       seedsYaml !== undefined
         ? this.#parseDatasourceSeeds(seedsYaml)
         : new Map();
-    const views =
-      viewYaml !== undefined
-        ? this.#parseViewTypes({ viewYaml, datasourceYaml })
-        : [];
     const services =
       servicesYaml !== undefined
         ? this.#parseServices({
             servicesYaml,
-            views,
-            datasources,
+            types: expandedTypes,
+            datasource,
             routesYaml,
             serviceClassName,
           })
         : { generics: [], customs: [] };
     const routes =
       routesYaml !== undefined
-        ? this.#parseRoutes({ routesYaml, views, datasources })
+        ? this.#parseRoutes({
+            routesYaml,
+            types: expandedTypes,
+            datasource,
+          })
         : {
             candidates: [],
             customs: [],
             nested: [],
             childrenOnly: new Set<string>(),
-            datasources,
+            datasource,
           };
-    const expandedDatasourceTypes = expandDatasourceTypes(
-      datasources,
-      idType,
-      fromSettings(settings).usesOptimisticConcurrency({}),
-    );
+
     return ensureHealth(
       new Deterministic({
-        datasourceTypes: datasources,
+        types,
+        expandedTypes,
+        datasource,
         datasourceSeeds: seeds,
-        viewTypes: views,
-        expandedDatasourceTypes,
-        expandedViewTypes: expandViewTypes(views, expandedDatasourceTypes),
         services,
         routes,
       }),
     );
   }
 
-  #parseDatasourceTypes(args: { yaml: string; idType: string }): DatasourceType[] {
-    const types = this.#readDatasourceTypes(YamlNode.fromYaml(args.yaml));
-    const byName = new Map(types.map((t) => [t.name, t]));
-    return types.map((t) => ({
-      name: t.name,
-      datasourceType: t.datasourceType ?? "standard",
-      uniqueIndexFields: t.uniqueIndexFields,
-      indexes: t.indexes,
-      skipMigrations: t.skipMigrations,
-      ...(t.target !== undefined ? { target: t.target } : {}),
-      ...(t.optimisticConcurrency !== undefined
-        ? { optimisticConcurrency: t.optimisticConcurrency }
+  #parseTypes(yaml: string): Type[] {
+    return YamlNode.fromYaml(yaml).namedList("types").map(({ name, node }) => {
+      const kind = typeKind(node);
+      const mapping = mappingOf(node);
+      const removeFields = node.strings("remove_fields");
+      return {
+        name,
+        tags: node.strings("tags"),
+        kind,
+        ...(kind === "inherit" ? { inherits: node.str("inherits") } : {}),
+        ...(kind === "union" ? { union: node.strings("union") } : {}),
+        ...(kind === "one_of" ? { oneOf: node.strings("one_of") } : {}),
+        ...(mapping ? { mapping } : {}),
+        ...(removeFields.length > 0 ? { removeFields } : {}),
+        fields: node.namedList("fields").map(({ name: fname, node: fnode }) =>
+          this.#readField(fname, fnode),
+        ),
+      };
+    });
+  }
+
+  #readField(name: string, node: YamlNode): TypeField {
+    const rawType = node.str("type") ?? "string";
+    const parsed = parseFieldType(rawType);
+    const references = referencesOf(node);
+    const size = sizeOf(node);
+    const minSize = node.finiteInt("min_size");
+    return {
+      name,
+      type: rawType,
+      kind: parsed.kind,
+      base: parsed.base,
+      isArray: parsed.isArray,
+      isNullable: node.bool("is_nullable"),
+      ...(size !== undefined ? { size } : {}),
+      ...(minSize !== undefined ? { minSize } : {}),
+      ...(references !== undefined ? { references } : {}),
+      ...(node.has("default_value")
+        ? { hasDefault: true, defaultValue: node.literal("default_value") }
         : {}),
-      fields: t.fields.map((field) => this.#resolvedField(field, byName, args.idType)),
-    }));
+    };
+  }
+
+  #parseDatasource(yaml: string, types: Type[]): DatasourceTable[] {
+    const root = YamlNode.fromYaml(yaml);
+    const tables = root.namedList("types").map(({ name, node }) => {
+      const uniqueIndexFields: string[] = [];
+      const indexes: DatasourceIndex[] = [];
+      for (const { name: indexName, node: indexBody } of node.namedList(
+        "indexes",
+      )) {
+        const rawFields = indexBody.child("fields").value;
+        const fields = Array.isArray(rawFields)
+          ? rawFields.filter((f): f is string => typeof f === "string")
+          : [];
+        indexes.push({
+          name: indexName,
+          fields,
+          isUnique: indexBody.bool("is_unique"),
+        });
+        if (indexBody.bool("is_unique") && fields.length === 1 && fields[0]) {
+          uniqueIndexFields.push(fields[0]);
+        }
+      }
+      const fields: DatasourceFieldOverlay[] = node
+        .namedList("fields")
+        .map(({ name: fname, node: fnode }) => ({
+          name: fname,
+          ...(fnode.has("is_readonly")
+            ? { isReadonly: fnode.bool("is_readonly") }
+            : {}),
+          ...(fnode.has("is_unique") ? { isUnique: fnode.bool("is_unique") } : {}),
+          ...(fnode.str("mapping") ? { mapping: fnode.str("mapping") } : {}),
+          ...(fnode.has("is_fixed_id")
+            ? { isFixedId: fnode.bool("is_fixed_id") }
+            : {}),
+        }));
+      return {
+        name,
+        ...(node.str("mapping") ? { mapping: node.str("mapping") } : {}),
+        ...(node.has("use_optimistic_concurrency")
+          ? { useOptimisticConcurrency: node.bool("use_optimistic_concurrency") }
+          : {}),
+        fields,
+        indexes,
+        uniqueIndexFields,
+      };
+    });
+
+    const filter = this.#typesFilter(root);
+    if (!filter) return tables;
+    const selected = new Set(
+      types.filter((t) => filter(t)).map((t) => t.name),
+    );
+    const overlayNames = new Set(tables.map((t) => t.name));
+    const extras = types
+      .filter((t) => selected.has(t.name) && !overlayNames.has(t.name))
+      .map(
+        (t): DatasourceTable => ({
+          name: t.name,
+          fields: [],
+          indexes: [],
+          uniqueIndexFields: [],
+        }),
+      );
+    return [...tables.filter((t) => selected.has(t.name)), ...extras];
   }
 
   #parseDatasourceSeeds(yaml: string): Map<string, SeedRow[]> {
@@ -283,42 +359,16 @@ class Parser {
     return byTable;
   }
 
-  #parseViewTypes(args: {
-    viewYaml: string;
-    datasourceYaml?: string;
-  }): ViewType[] {
-    const viewRoot = YamlNode.fromYaml(args.viewYaml);
-    const directive = this.#datasourceDirective(viewRoot);
-    if (directive !== undefined && args.datasourceYaml === undefined) {
-      throw new Error(
-        "view_types.yaml declares an includes datasource_types directive but no datasource_types.yaml was provided.",
-      );
-    }
-    const explicit = this.#readRawViews(viewRoot);
-    const dsTypes =
-      args.datasourceYaml !== undefined
-        ? this.#readDatasourceTypes(YamlNode.fromYaml(args.datasourceYaml))
-        : [];
-    const byName = new Map(dsTypes.map((t) => [t.name, t]));
-    const names = new Set(explicit.map((v) => v.name));
-    let views = directive
-      ? [...this.#passThroughs(dsTypes, directive, names), ...explicit]
-      : explicit;
-    if (byName.size > 0) {
-      const explicitNames = new Set(views.map((v) => v.name));
-      views = views.flatMap((v) => [
-        v,
-        ...this.#updateVariantsFor(v, byName, explicitNames),
-      ]);
-    }
-    if (directive?.autoEnrich) views = this.#applyAutoEnrich(views, byName);
-    return views.map((view) => this.#normalizeView(view));
+  #typesFilter(root: YamlNode) {
+    const block = this.#includeBlock(root, "types");
+    if (block === undefined) return undefined;
+    return compileTypesFilter(block.str("filter"));
   }
 
   #parseServices(args: {
     servicesYaml: string;
-    views: ViewType[];
-    datasources: DatasourceType[];
+    types: Type[];
+    datasource: DatasourceTable[];
     routesYaml?: string;
     serviceClassName: (entity: string) => string;
   }): ParsedServices {
@@ -337,24 +387,25 @@ class Parser {
     );
     const explicitCustomNames = new Set(customEntries.map((s) => s.name));
     const methodsByService = this.#collectRouteServiceMethods(args.routesYaml);
+    const dsByName = new Map(args.datasource.map((d) => [d.name, d]));
 
-    const block = this.#includeBlock(root, "view_type_services");
+    const predicate = this.#typesFilter(root);
     let generics: ServiceCandidate[] = [];
-    if (block !== undefined) {
-      const predicate = compileServicesFilter(block.str("filter"));
-      const inheritByName = new Map(
-        args.views.flatMap((view) =>
-          view.kind === "shaped" ? [[view.name, view.inherits] as const] : [],
-        ),
-      );
+    if (predicate !== undefined) {
       const compare = compareByDatasourceTypeOrder(
-        args.datasources,
-        (name) => inheritByName.get(name),
+        args.types,
+        (name) => args.types.find((t) => t.name === name)?.inherits,
       );
-      generics = this.#serviceCandidates(args.views, args.datasources)
-        .filter(predicate)
-        .filter((c) => !explicitCustomNames.has(args.serviceClassName(c.name)))
-        .sort((a, b) => compare(a.name, b.name));
+      generics = args.types
+        .filter((t) => predicate(t))
+        .filter((t) => !explicitCustomNames.has(args.serviceClassName(t.name)))
+        .sort((a, b) => compare(a.name, b.name))
+        .map((t) => ({
+          name: t.name,
+          tags: t.tags,
+          inherits: t.inherits,
+          byFields: uniqueLookupFields(t, dsByName.get(t.name)),
+        }));
     }
 
     const customs: CustomServiceEntry[] = customEntries.map((entry) => ({
@@ -368,33 +419,47 @@ class Parser {
 
   #parseRoutes(args: {
     routesYaml: string;
-    views: ViewType[];
-    datasources: DatasourceType[];
+    types: Type[];
+    datasource: DatasourceTable[];
   }): ParsedRoutes {
     const root = YamlNode.fromYaml(args.routesYaml);
-    const dsByName = new Map(args.datasources.map((d) => [d.name, d] as const));
-    const allCandidates = this.#routeCandidates(args.views, dsByName);
-    const childrenOnly = this.#collectCombinedChildNames(root, dsByName);
-    this.#attachByFields(allCandidates, root, dsByName);
-    const customs = this.#extractCustomRoutes(root, dsByName);
-    const nested = this.#collectNestedDescriptors(root, dsByName);
+    const dsByName = new Map(args.datasource.map((d) => [d.name, d]));
+    const typeByName = new Map(args.types.map((t) => [t.name, t]));
+    const overlays = this.#entityOverlays(root);
+    const allCandidates = args.types.map((t) => {
+      const overlay = overlays.get(t.name);
+      return {
+        name: t.name,
+        tags: t.tags,
+        inherits: t.inherits,
+        byFields: [] as RouteByField[],
+        ...(overlay?.eagerReadPath ? { eagerReadPath: overlay.eagerReadPath } : {}),
+        ...(overlay?.eagerUpdatePath
+          ? { eagerUpdatePath: overlay.eagerUpdatePath }
+          : {}),
+        ...(overlay?.eagerReadMemberOnly
+          ? { eagerReadMemberOnly: overlay.eagerReadMemberOnly }
+          : {}),
+      };
+    });
+    const childrenOnly = this.#collectCombinedChildNames(root, typeByName);
+    this.#attachByFields(allCandidates, root, dsByName, typeByName);
+    const customs = this.#extractCustomRoutes(root, dsByName, typeByName);
+    const nested = this.#collectNestedDescriptors(root, typeByName);
 
-    const block = this.#includeBlock(root, "view_type_routes");
+    const predicate = this.#typesFilter(root);
     let candidates: RouteCandidate[] = [];
-    if (block !== undefined) {
-      const predicate = compileRoutesFilter(block.str("filter"));
-      const inheritByName = new Map(
-        args.views.flatMap((view) =>
-          view.kind === "shaped" ? [[view.name, view.inherits] as const] : [],
-        ),
-      );
+    if (predicate !== undefined) {
       const compare = compareByDatasourceTypeOrder(
-        args.datasources,
-        (name) => inheritByName.get(name),
+        args.types,
+        (name) => typeByName.get(name)?.inherits,
       );
       candidates = allCandidates
-        .filter((c) => c.target !== "None")
-        .filter(predicate)
+        .filter((c) => predicate({
+          name: c.name,
+          tags: c.tags,
+          inherits: c.inherits,
+        }))
         .filter((c) => !childrenOnly.has(c.name))
         .sort((a, b) => compare(a.name, b.name));
     }
@@ -404,356 +469,38 @@ class Parser {
       customs,
       nested,
       childrenOnly,
-      datasources: args.datasources,
+      datasource: args.datasource,
     };
   }
 
-  #readDatasourceTypes(root: YamlNode): RawDatasourceType[] {
-    return root.namedList("types").map(({ name, node }) => {
-      const uniqueIndexFields: string[] = [];
-      const indexes: DatasourceIndex[] = [];
-      for (const { name: indexName, node: indexBody } of node.namedList(
-        "indexes",
-      )) {
-        const rawFields = indexBody.child("fields").value;
-        const fields = Array.isArray(rawFields)
-          ? rawFields.filter((f): f is string => typeof f === "string")
-          : [];
-        indexes.push({
-          name: indexName,
-          fields,
-          isUnique: indexBody.bool("is_unique"),
-        });
-        const field = this.#singleColumnUniqueIndexField(indexBody);
-        if (field !== undefined && !uniqueIndexFields.includes(field)) {
-          uniqueIndexFields.push(field);
-        }
+  #entityOverlays(root: YamlNode): Map<
+    string,
+    {
+      eagerReadPath?: string[];
+      eagerUpdatePath?: string[];
+      eagerReadMemberOnly?: string[];
+    }
+  > {
+    const out = new Map<
+      string,
+      {
+        eagerReadPath?: string[];
+        eagerUpdatePath?: string[];
+        eagerReadMemberOnly?: string[];
       }
-      return {
-        name,
-        datasourceType: node.str("datasource_type"),
-        target: node.child("target").value === null ? null : node.str("target"),
-        optimisticConcurrency: node.has("use_optimistic_concurrency")
-          ? node.bool("use_optimistic_concurrency")
-          : undefined,
-        uniqueIndexFields,
-        indexes,
-        skipMigrations: node.bool("skip_migrations"),
-        fields: node.namedList("fields").map(({ name: fname, node: fnode }) => ({
-          name: fname,
-          type: fnode.str("type"),
-          isNullable: fnode.bool("is_nullable"),
-          references: fnode.str("references"),
-          isPrimaryKey: fnode.bool("primary_key"),
-          isUnique: fnode.bool("is_unique"),
-          minSize: fnode.finiteNumber("min_size"),
-          size: fnode.finiteNumber("size"),
-          hasDefault: fnode.has("default_value"),
-          defaultValue: fnode.has("default_value")
-            ? fnode.literal("default_value")
-            : undefined,
-        })),
-      };
-    });
-  }
-
-  #singleColumnUniqueIndexField(body: YamlNode): string | undefined {
-    if (!body.bool("is_unique")) return undefined;
-    const fields = body.child("fields").value;
-    if (!Array.isArray(fields) || fields.length !== 1) return undefined;
-    const only = fields[0];
-    return typeof only === "string" && only.length > 0 ? only : undefined;
-  }
-
-  #inheritedType(
-    references: string,
-    byName: Map<string, RawDatasourceType>,
-    idType: string,
-  ): string | undefined {
-    const [parentName, column, extra] = references.split(".");
-    if (extra !== undefined || !parentName || !column) return undefined;
-    const parent = byName.get(parentName);
-    if (parent === undefined) return undefined;
-    const pk = parent.fields.find((f) => f.isPrimaryKey);
-    if (pk !== undefined) return pk.name === column ? pk.type : undefined;
-    return column === "id" ? inheritedIdType(idType) : undefined;
-  }
-
-  #resolvedField(
-    field: RawDatasourceField,
-    byName: Map<string, RawDatasourceType>,
-    idType: string,
-  ): DatasourceField {
-    let type = field.type;
-    if (type === undefined) {
-      if (field.references === undefined) {
-        type = "string";
-      } else {
-        const inherited = this.#inheritedType(field.references, byName, idType);
-        if (inherited === undefined) {
-          throw new Error(
-            `invariant: type-less reference "${field.name}" -> "${field.references}" has no resolvable parent primary key`,
-          );
-        }
-        type = inherited;
-      }
-    }
-    return {
-      name: field.name,
-      type,
-      isNullable: field.isNullable,
-      references: field.references,
-      ...(field.isPrimaryKey ? { isPrimaryKey: true } : {}),
-      ...(field.isUnique ? { isUnique: true } : {}),
-      ...(field.minSize !== undefined ? { minSize: field.minSize } : {}),
-      ...(field.size !== undefined ? { size: field.size } : {}),
-      ...(field.hasDefault
-        ? { hasDefault: true, defaultValue: field.defaultValue }
-        : {}),
-    };
-  }
-
-  #datasourceDirective(viewRoot: YamlNode): DsDirective | undefined {
-    for (const { name, node } of viewRoot.namedList("includes")) {
-      if (name !== "datasource_types") continue;
-      return {
-        include: node.str("include"),
-        filter: node.str("filter"),
-        autoEnrich: node.bool("auto_enrich"),
-      };
-    }
-    return undefined;
-  }
-
-  #readRawViews(viewRoot: YamlNode): RawView[] {
-    return viewRoot.namedList("types").map(({ name, node }) => ({
-      name,
-      inherits: node.str("inherits"),
-      oneOf: Array.isArray(node.child("one_of").value)
-        ? node.strings("one_of")
-        : undefined,
-      omit: node.strings("omit"),
-      fields: node.namedList("fields").map(({ name: fname, node: fnode }) => ({
-        name: fname,
-        type: fnode.str("type") ?? "string",
-        isNullable: fnode.bool("is_nullable"),
-        size: fnode.finiteInt("size"),
-        minSize: fnode.finiteInt("min_size"),
-      })),
-      enrichments: [],
-    }));
-  }
-
-  #includeMatches(include: string | undefined, name: string): boolean {
-    return (
-      include === undefined ||
-      include === "*" ||
-      include
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .includes(name)
-    );
-  }
-
-  #compileDsFilter(
-    filterExpr: string | undefined,
-  ): (t: { name: string; datasource_type: string | null }) => boolean {
-    if (filterExpr === undefined) return () => true;
-    try {
-      const fn = new Function("type", `return (${filterExpr});`);
-      return (t) => Boolean(fn(t));
-    } catch (e) {
-      throw new Error(
-        `datasource_types.filter is not a valid expression: ${(e as Error).message}`,
-      );
-    }
-  }
-
-  #inheritedTable(inherits: string | undefined): string | undefined {
-    return inherits?.startsWith(DS_PREFIX)
-      ? inherits.slice(DS_PREFIX.length)
-      : undefined;
-  }
-
-  #parseFk(field: RawDatasourceField): string | undefined {
-    if (field.type !== "number" || field.references === undefined) {
-      return undefined;
-    }
-    const [table, column] = field.references.split(".");
-    return column === "id" ? table : undefined;
-  }
-
-  #targetIsEnrichable(
-    target: RawDatasourceType | undefined,
-  ): target is RawDatasourceType {
-    if (target === undefined) return false;
-    if (target.datasourceType === "readonly-lookup") return true;
-    const name = target.fields.find((f) => f.name === "name");
-    return (
-      name !== undefined &&
-      name.type === "string" &&
-      name.isUnique &&
-      !name.isNullable
-    );
-  }
-
-  #enrichmentsFor(
-    tableName: string,
-    byName: Map<string, RawDatasourceType>,
-  ): ViewEnrichment[] {
-    const inherited = byName.get(tableName);
-    if (inherited === undefined) return [];
-    return inherited.fields.flatMap((field) => {
-      if (!field.name.endsWith("_id")) return [];
-      const table = this.#parseFk(field);
-      if (table === undefined) return [];
-      const target = byName.get(table);
-      if (!this.#targetIsEnrichable(target)) return [];
-      const prefix = field.name.slice(0, -"_id".length);
-      return [
-        {
-          fkColumn: field.name,
-          prefix,
-          targetTable: table,
-          newField: `${prefix}_name`,
-          targetIsReadonlyLookup: target.datasourceType === "readonly-lookup",
-          isNullable: field.isNullable,
-        },
-      ];
-    });
-  }
-
-  #applyAutoEnrich(
-    views: RawView[],
-    byName: Map<string, RawDatasourceType>,
-  ): RawView[] {
-    return views.map((view) => {
-      const table = this.#inheritedTable(view.inherits);
-      if (table === undefined) return view;
-      const enrichments = this.#enrichmentsFor(table, byName);
-      if (enrichments.length === 0) return view;
-      return {
-        ...view,
-        enrichments,
-        fields: [
-          ...view.fields,
-          ...enrichments.map((e) => ({
-            name: e.newField,
-            type: "string",
-            isNullable: e.isNullable,
-            size: undefined as number | undefined,
-            minSize: undefined as number | undefined,
-          })),
-        ],
-      };
-    });
-  }
-
-  #isNonDerivable(name: string): boolean {
-    return (
-      NON_DERIVABLE.some((s) => name.endsWith(s)) ||
-      name.startsWith("create_") ||
-      name.startsWith("update_")
-    );
-  }
-
-  #auditOmits(fields: RawDatasourceField[]): {
-    updateBodyOmits: string[];
-    auditOmits: string[];
-    hasCustomPk: boolean;
-  } {
-    const declared = new Set(fields.map((f) => f.name));
-    const missing = ["id", "uuid", "created", "updated"].filter(
-      (n) => !declared.has(n),
-    );
-    const updateBodyOmits = [...missing];
-    let hasCustomPk = false;
-    for (const field of fields) {
-      if (field.isPrimaryKey && field.name !== "id") {
-        updateBodyOmits.push(field.name);
-        hasCustomPk = true;
-      }
-    }
-    return { updateBodyOmits, auditOmits: missing, hasCustomPk };
-  }
-
-  #emptyShaped(name: string, inherits: string, omit: string[]): RawView {
-    return {
-      name,
-      inherits,
-      oneOf: undefined,
-      omit,
-      fields: [],
-      enrichments: [],
-    };
-  }
-
-  #updateVariantsFor(
-    view: RawView,
-    byName: Map<string, RawDatasourceType>,
-    explicit: Set<string>,
-  ): RawView[] {
-    const table = this.#inheritedTable(view.inherits);
-    if (table === undefined) return [];
-    const ds = byName.get(table);
-    if (ds === undefined || ds.datasourceType === "readonly-lookup") return [];
-    if (this.#isNonDerivable(view.name) || explicit.has(`update_${view.name}`)) {
-      return [];
-    }
-    const omits = this.#auditOmits(ds.fields);
-    const inherits = `${DS_PREFIX}${table}`;
-    const out = [
-      this.#emptyShaped(`update_${view.name}`, inherits, omits.updateBodyOmits),
-    ];
-    if (omits.hasCustomPk && !explicit.has(`create_${view.name}`)) {
-      out.push(
-        this.#emptyShaped(`create_${view.name}`, inherits, omits.auditOmits),
-      );
+    >();
+    for (const { name, node } of root.namedList("routes")) {
+      const read = node.strings("eager_read_path");
+      const update = node.strings("eager_update_path");
+      const member = node.strings("eager_read_member_only");
+      if (read.length + update.length + member.length === 0) continue;
+      out.set(name, {
+        ...(read.length > 0 ? { eagerReadPath: read } : {}),
+        ...(update.length > 0 ? { eagerUpdatePath: update } : {}),
+        ...(member.length > 0 ? { eagerReadMemberOnly: member } : {}),
+      });
     }
     return out;
-  }
-
-  #passThroughs(
-    dsTypes: RawDatasourceType[],
-    directive: DsDirective,
-    explicit: Set<string>,
-  ): RawView[] {
-    const predicate = this.#compileDsFilter(directive.filter);
-    return dsTypes
-      .filter(
-        (ds) =>
-          !explicit.has(ds.name) &&
-          this.#includeMatches(directive.include, ds.name) &&
-          predicate({
-            name: ds.name,
-            datasource_type: ds.datasourceType ?? null,
-          }),
-      )
-      .map((ds) =>
-        this.#emptyShaped(ds.name, `${DS_PREFIX}${ds.name}`, []),
-      );
-  }
-
-  #normalizeView(view: RawView): ViewType {
-    if (view.oneOf !== undefined) {
-      return { kind: "union", name: view.name, members: view.oneOf };
-    }
-    return {
-      kind: "shaped",
-      name: view.name,
-      inherits: this.#inheritedTable(view.inherits) ?? null,
-      fields: view.fields.map((f) => ({
-        name: f.name,
-        type: f.type,
-        ...parseFieldType(f.type),
-        isNullable: f.isNullable,
-        ...(f.size !== undefined ? { size: f.size } : {}),
-        ...(f.minSize !== undefined ? { minSize: f.minSize } : {}),
-      })),
-      enrichments: view.enrichments,
-      omit: view.omit,
-    };
   }
 
   #includeBlock(root: YamlNode, key: string): YamlNode | undefined {
@@ -776,10 +523,10 @@ class Parser {
       }
       if (node.record === undefined) return;
       const service = node.str("service");
-      const serviceMethod = node.str("serviceMethod");
-      if (service !== undefined && serviceMethod !== undefined) {
+      const fn = node.str("function");
+      if (service !== undefined && fn !== undefined) {
         const set = byService.get(service) ?? new Set<string>();
-        set.add(serviceMethod);
+        set.add(fn);
         byService.set(service, set);
       }
       for (const key of Object.keys(node.record)) visit(node.child(key));
@@ -787,61 +534,6 @@ class Parser {
     visit(root.child("routes"));
     visit(root.child("combined_routes"));
     return byService;
-  }
-
-  #serviceCandidates(
-    views: ViewType[],
-    datasources: DatasourceType[],
-  ): ServiceCandidate[] {
-    const byName = new Map<string, ServiceCandidate>();
-    const dsMap = new Map(
-      datasources.map((d) => [d.name, d.datasourceType] as const),
-    );
-    const byFieldsByEntity = new Map(
-      datasources.map((d) => [d.name, uniqueLookupFields(d)] as const),
-    );
-
-    for (const ds of datasources) {
-      byName.set(ds.name, {
-        name: ds.name,
-        kind: "datasource_type",
-        inheritsNamespace: "",
-        datasourceType: ds.datasourceType,
-        byFields: byFieldsByEntity.get(ds.name)!,
-      });
-    }
-
-    for (const view of views) {
-      if (view.name.startsWith("update_") || view.name.startsWith("create_")) {
-        continue;
-      }
-      if (view.kind === "union") {
-        byName.set(view.name, {
-          name: view.name,
-          kind: "view_type",
-          inheritsNamespace: "",
-          datasourceType: null,
-          byFields: [],
-        });
-        continue;
-      }
-      const inheritsNamespace = view.inherits !== null ? "datasource_types" : "";
-      const datasourceType =
-        view.inherits !== null ? (dsMap.get(view.inherits) ?? null) : null;
-      const byFields: ServiceByField[] =
-        view.inherits !== null
-          ? (byFieldsByEntity.get(view.inherits) ?? [])
-          : [];
-      byName.set(view.name, {
-        name: view.name,
-        kind: "view_type",
-        inheritsNamespace,
-        datasourceType,
-        byFields,
-      });
-    }
-
-    return [...byName.values()];
   }
 
   #defaultParentBasePath(parentName: string): string {
@@ -856,11 +548,16 @@ class Parser {
     return `/${specPlural(name)}`;
   }
 
-  #columnIsUnique(ds: DatasourceType, columnName: string): boolean {
-    if (columnName === "id") return true;
-    const field = ds.fields.find((f) => f.name === columnName);
-    if (field?.isPrimaryKey === true || field?.isUnique === true) return true;
-    return ds.uniqueIndexFields.includes(columnName);
+  #columnIsUnique(
+    table: DatasourceTable | undefined,
+    type: Type | undefined,
+    columnName: string,
+  ): boolean {
+    if (columnName === primaryKeyColumn(table, type)) return true;
+    if (table?.fields.some((f) => f.name === columnName && f.isUnique)) {
+      return true;
+    }
+    return table?.uniqueIndexFields.includes(columnName) ?? false;
   }
 
   #singularizeLastToken(snakePlural: string): string {
@@ -869,9 +566,9 @@ class Parser {
     return parts.join("_");
   }
 
-  #entityHasField(ds: DatasourceType, fieldName: string): boolean {
+  #entityHasField(type: Type | undefined, fieldName: string): boolean {
     if (fieldName === "id") return true;
-    return ds.fields.some((f) => f.name === fieldName);
+    return type?.fields.some((f) => f.name === fieldName) ?? false;
   }
 
   #parseVerb(token: string): { methods: string[] | null; body: string } {
@@ -908,20 +605,20 @@ class Parser {
 
   #parseShorthandByField(
     token: string,
-    dsByName: Map<string, DatasourceType>,
+    typeByName: Map<string, Type>,
   ): ByFieldParsed {
     if (typeof token !== "string" || token.length === 0) {
       throw new Error("parseByFieldEntry: expected non-empty string token");
     }
     const { methods, body } = this.#parseVerb(token);
     const { entity, byField } = this.#splitEntityField(token, body);
-    const ds = dsByName.get(entity);
-    if (ds === undefined) {
+    const type = typeByName.get(entity);
+    if (type === undefined) {
       throw new Error(
         `parseByFieldEntry: unknown entity \`${entity}\` in route \`${token}\``,
       );
     }
-    if (!this.#entityHasField(ds, byField)) {
+    if (!this.#entityHasField(type, byField)) {
       throw new Error(
         `parseByFieldEntry: field \`${byField}\` not found on entity \`${entity}\` in route \`${token}\``,
       );
@@ -947,18 +644,18 @@ class Parser {
 
   #parseByFieldEntry(
     entry: unknown,
-    dsByName: Map<string, DatasourceType>,
+    typeByName: Map<string, Type>,
   ): ByFieldParsed | null {
     if (entry == null) return null;
     if (typeof entry === "string") {
-      return this.#parseShorthandByField(entry, dsByName);
+      return this.#parseShorthandByField(entry, typeByName);
     }
     if (!isRecord(entry)) return null;
     const pairs = Object.entries(entry);
     if (pairs.length === 0) return null;
     const [key, def] = pairs[0]!;
     if (def == null) {
-      return this.#parseShorthandByField(key, dsByName);
+      return this.#parseShorthandByField(key, typeByName);
     }
     if (!isRecord(def)) return null;
     if ("entity" in def && "byField" in def) {
@@ -967,61 +664,21 @@ class Parser {
     return null;
   }
 
-  #findForeignKeyTo(child: DatasourceType, parentName: string): string | null {
+  #refParent(references: string | [string, string] | undefined): string | null {
+    if (typeof references !== "string") return null;
+    return references.split(".")[0] ?? null;
+  }
+
+  #findForeignKeyTo(child: Type, parentName: string): string | null {
     for (const field of child.fields) {
-      if (field.references === undefined) continue;
-      const [refTable] = field.references.split(".");
-      if (refTable === parentName) return field.name;
+      if (this.#refParent(field.references) === parentName) return field.name;
     }
     return null;
   }
 
-  #routeCandidates(
-    views: ViewType[],
-    dsByName: Map<string, DatasourceType>,
-  ): RouteCandidate[] {
-    const out: RouteCandidate[] = [];
-    for (const view of views) {
-      if (view.name.startsWith("update_") || view.name.startsWith("create_")) {
-        continue;
-      }
-      if (view.kind === "union") {
-        out.push({
-          name: view.name,
-          kind: "view_type",
-          inheritsNamespace: "",
-          datasourceType: "",
-          target: null,
-          byFields: [],
-        });
-        continue;
-      }
-      const inheritsNamespace =
-        view.inherits !== null ? "datasource_types" : "";
-      const kind: RouteCandidate["kind"] =
-        inheritsNamespace === "datasource_types"
-          ? "datasource_type"
-          : "view_type";
-      const parent =
-        view.inherits !== null ? dsByName.get(view.inherits) : undefined;
-      out.push({
-        name: view.name,
-        kind,
-        inheritsNamespace,
-        datasourceType: parent?.datasourceType ?? "",
-        target: parent?.target ?? null,
-        ...(parent?.optimisticConcurrency !== undefined
-          ? { optimisticConcurrency: parent.optimisticConcurrency }
-          : {}),
-        byFields: [],
-      });
-    }
-    return out;
-  }
-
   #collectCombinedChildNames(
     root: YamlNode,
-    dsByName: Map<string, DatasourceType>,
+    typeByName: Map<string, Type>,
   ): Set<string> {
     const childrenOnly = new Set<string>();
     const parents = new Set(
@@ -1029,7 +686,7 @@ class Parser {
     );
     for (const { name: parentName, node } of root.namedList("combined_routes")) {
       const def = node.record as CombinedRouteDef | undefined;
-      for (const child of def?.combined_types ?? []) {
+      for (const child of def?.combines ?? []) {
         let childName: string;
         if (typeof child === "string") {
           childName = specName(child);
@@ -1039,10 +696,10 @@ class Parser {
           childName = specName(rawName);
         }
         if (parents.has(childName)) continue;
-        const childDs = dsByName.get(childName);
+        const childType = typeByName.get(childName);
         if (
-          childDs !== undefined &&
-          this.#findForeignKeyTo(childDs, parentName) !== null
+          childType !== undefined &&
+          this.#findForeignKeyTo(childType, parentName) !== null
         ) {
           childrenOnly.add(childName);
         }
@@ -1054,7 +711,8 @@ class Parser {
   #upsertByField(
     list: RouteByField[],
     parsed: ByFieldParsed,
-    dsByName: Map<string, DatasourceType>,
+    dsByName: Map<string, DatasourceTable>,
+    typeByName: Map<string, Type>,
   ): void {
     const existing = list.find((e) => e.byField === parsed.byField);
     if (existing) {
@@ -1069,22 +727,26 @@ class Parser {
       }
       return;
     }
-    const ds = dsByName.get(parsed.entity);
     list.push({
       byField: parsed.byField,
       methods: Array.isArray(parsed.methods) ? parsed.methods : undefined,
-      byFieldUnique: ds ? this.#columnIsUnique(ds, parsed.byField) : false,
+      byFieldUnique: this.#columnIsUnique(
+        dsByName.get(parsed.entity),
+        typeByName.get(parsed.entity),
+        parsed.byField,
+      ),
     });
   }
 
   #attachByFields(
     candidates: RouteCandidate[],
     root: YamlNode,
-    dsByName: Map<string, DatasourceType>,
+    dsByName: Map<string, DatasourceTable>,
+    typeByName: Map<string, Type>,
   ): void {
     const byFieldByEntity = new Map<string, RouteByField[]>();
     for (const entry of root.child("routes").items()) {
-      const parsed = this.#parseByFieldEntry(entry.value, dsByName);
+      const parsed = this.#parseByFieldEntry(entry.value, typeByName);
       if (parsed === null) continue;
       if (!byFieldByEntity.has(parsed.entity)) {
         byFieldByEntity.set(parsed.entity, []);
@@ -1093,6 +755,7 @@ class Parser {
         byFieldByEntity.get(parsed.entity)!,
         parsed,
         dsByName,
+        typeByName,
       );
     }
     for (const candidate of candidates) {
@@ -1105,15 +768,24 @@ class Parser {
 
   #extractCustomRoutes(
     root: YamlNode,
-    dsByName: Map<string, DatasourceType>,
+    dsByName: Map<string, DatasourceTable>,
+    typeByName: Map<string, Type>,
   ): CustomRouteEntry[] {
     const customs: CustomRouteEntry[] = [];
     for (const entry of root.child("routes").items()) {
       if (entry.record === undefined) continue;
-      if (this.#parseByFieldEntry(entry.value, dsByName) !== null) continue;
+      if (this.#parseByFieldEntry(entry.value, typeByName) !== null) continue;
       const [name] = Object.keys(entry.record);
       if (name === undefined) continue;
       const node = entry.child(name);
+      if (
+        node.has("eager_read_path") ||
+        node.has("eager_update_path") ||
+        node.has("eager_read_member_only")
+      ) {
+        continue;
+      }
+      if (node.str("path") === undefined) continue;
       customs.push({
         name,
         path: node.str("path"),
@@ -1151,11 +823,12 @@ class Parser {
   #detectJunction(
     parentName: string,
     childName: string,
-    dsByName: Map<string, DatasourceType>,
+    typeByName: Map<string, Type>,
   ): JunctionMatch | null {
     const matches: JunctionMatch[] = [];
-    for (const [name, def] of dsByName) {
+    for (const [name, def] of typeByName) {
       if (name === parentName || name === childName) continue;
+      if (!def.tags.includes("many_to_many")) continue;
       const parentFk = this.#findForeignKeyTo(def, parentName);
       const childFk = this.#findForeignKeyTo(def, childName);
       if (parentFk !== null && childFk !== null) {
@@ -1219,7 +892,7 @@ class Parser {
 
   #collectNestedDescriptors(
     root: YamlNode,
-    dsByName: Map<string, DatasourceType>,
+    typeByName: Map<string, Type>,
   ): NestedRouteDescriptor[] {
     const nested: NestedRouteDescriptor[] = [];
     for (const { name: parentName, node } of root.namedList("combined_routes")) {
@@ -1228,7 +901,7 @@ class Parser {
         typeof def.route === "string" && def.route.length > 0
           ? def.route
           : this.#defaultParentBasePath(parentName);
-      for (const rawChild of def.combined_types ?? []) {
+      for (const rawChild of def.combines ?? []) {
         const child = this.#normalizeCombinedChild(rawChild);
         if (child.via || child.target) {
           const junctionName = child.via;
@@ -1238,10 +911,10 @@ class Parser {
               `combined_routes: M2M child must declare both via: and target: (parent=${parentName}, child=${child.name})`,
             );
           }
-          const junctionDef = dsByName.get(junctionName);
+          const junctionDef = typeByName.get(junctionName);
           if (junctionDef === undefined) {
             throw new Error(
-              `combined_routes: junction "${junctionName}" not found in datasource_types.yaml`,
+              `combined_routes: junction "${junctionName}" not found in types.yaml`,
             );
           }
           const parentFkField = this.#findForeignKeyTo(junctionDef, parentName);
@@ -1262,10 +935,10 @@ class Parser {
           );
           continue;
         }
-        const childDef = dsByName.get(child.name);
+        const childDef = typeByName.get(child.name);
         if (childDef === undefined) {
           throw new Error(
-            `combined_routes: child "${child.name}" not found in datasource_types.yaml`,
+            `combined_routes: child "${child.name}" not found in types.yaml`,
           );
         }
         const fkColumn = this.#findForeignKeyTo(childDef, parentName);
@@ -1279,7 +952,7 @@ class Parser {
           );
           continue;
         }
-        const junction = this.#detectJunction(parentName, child.name, dsByName);
+        const junction = this.#detectJunction(parentName, child.name, typeByName);
         if (junction !== null) {
           nested.push(
             this.#m2mDescriptor(parentName, parentBasePath, {
@@ -1293,7 +966,7 @@ class Parser {
           continue;
         }
         throw new Error(
-          `combined_routes: child "${child.name}" has no FK to parent "${parentName}" and no detectable junction table in datasource_types.yaml`,
+          `combined_routes: child "${child.name}" has no FK to parent "${parentName}" and no detectable junction table in types.yaml`,
         );
       }
     }

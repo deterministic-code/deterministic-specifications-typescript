@@ -34,23 +34,23 @@ async function withDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
 
 describe("withIncludeFilePath", () => {
   test("fills path and directory when options are empty", () => {
-    expect(withIncludeFilePath("/tmp/app/datasource_types.yaml")).toEqual({
-      includeFilePath: "/tmp/app/datasource_types.yaml",
+    expect(withIncludeFilePath("/tmp/app/types.yaml")).toEqual({
+      includeFilePath: "/tmp/app/types.yaml",
       includeBasePath: "/tmp/app",
     });
   });
 
   test("keeps an explicit includeFilePath and includeBasePath", () => {
     expect(
-      withIncludeFilePath("/tmp/app/datasource_types.yaml", {
+      withIncludeFilePath("/tmp/app/types.yaml", {
         includeFilePath: "/other/file.yaml",
         includeBasePath: "/other",
-        datasourceTypes: "inline",
+        types: "inline",
       }),
     ).toEqual({
       includeFilePath: "/other/file.yaml",
       includeBasePath: "/other",
-      datasourceTypes: "inline",
+      types: "inline",
     });
   });
 });
@@ -71,7 +71,7 @@ types: []
 
   test("accepts a document with no file includes", async () => {
     await withDir(async (dir) => {
-      const path = join(dir, "datasource_types.yaml");
+      const path = join(dir, "types.yaml");
       const doc = parsed(`version: 1.0.0
 includes:
   - id: saved_backend

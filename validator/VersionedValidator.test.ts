@@ -4,12 +4,12 @@ import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
   DatasourceSeedsValidator,
-  DatasourceTypesValidator,
+  DatasourceValidator,
   FrontendBindingsValidator,
   RoutesApiValidator,
   RoutesValidator,
   ServicesValidator,
-  ViewTypesValidator,
+  TypesValidator,
   VersionedValidator,
   engineConstructor,
 } from "./VersionedValidator.ts";
@@ -18,14 +18,13 @@ const VALID = `version: 1.0.0
 types:
   - user:
       fields:
-        - id:
-            type: integer
-      target: StandardCrud
+        - email:
+            type: string
 `;
 
 const MINIMAL: Record<string, string> = {
   DatasourceSeedsValidator: "version: 1.0.0\nseeds: []\n",
-  ViewTypesValidator: "version: 1.0.0\ntypes: []\n",
+  DatasourceValidator: "version: 1.0.0\ntypes: []\n",
   ServicesValidator: "version: 1.0.0\nservices: []\n",
   RoutesValidator: "version: 1.0.0\nroutes: []\n",
   RoutesApiValidator: "version: 1.0.0\nroutes: []\ncomponents: {}\n",
@@ -34,14 +33,14 @@ const MINIMAL: Record<string, string> = {
 
 describe("VersionedValidator dispatcher", () => {
   test("1.0.0 documents use the live engine", async () => {
-    expect(await new DatasourceTypesValidator().validate(VALID)).toEqual({
+    expect(await new TypesValidator().validate(VALID)).toEqual({
       valid: true,
       errors: [],
     });
   });
 
   test("rejects a missing version with a positioned error", async () => {
-    const result = await new DatasourceTypesValidator().validate("types: []\n");
+    const result = await new TypesValidator().validate("types: []\n");
     expect(result.valid).toBe(false);
     expect(result.errors[0]).toMatchObject({
       instancePath: "/version",
@@ -50,9 +49,7 @@ describe("VersionedValidator dispatcher", () => {
   });
 
   test("rejects a non-mapping document before loading an engine", async () => {
-    const result = await new DatasourceTypesValidator().validate(
-      "- just a list\n",
-    );
+    const result = await new TypesValidator().validate("- just a list\n");
     expect(result.valid).toBe(false);
     expect(result.errors[0]).toMatchObject({
       instancePath: "/version",
@@ -61,7 +58,7 @@ describe("VersionedValidator dispatcher", () => {
   });
 
   test("rejects an unknown published version", async () => {
-    const result = await new DatasourceTypesValidator().validate(
+    const result = await new TypesValidator().validate(
       "version: 9.9.9\ntypes: []\n",
     );
     expect(result.valid).toBe(false);
@@ -72,7 +69,7 @@ describe("VersionedValidator dispatcher", () => {
   });
 
   test("rejects a malformed version token", async () => {
-    const result = await new DatasourceTypesValidator().validate(
+    const result = await new TypesValidator().validate(
       "version: latest\ntypes: []\n",
     );
     expect(result.valid).toBe(false);
@@ -80,9 +77,7 @@ describe("VersionedValidator dispatcher", () => {
   });
 
   test("reports YAML syntax errors without loading an engine", async () => {
-    const result = await new DatasourceTypesValidator().validate(
-      "foo: [unterminated\n",
-    );
+    const result = await new TypesValidator().validate("foo: [unterminated\n");
     expect(result.valid).toBe(false);
     expect(result.errors[0]).toMatchObject({
       instancePath: "",
@@ -95,17 +90,15 @@ describe("VersionedValidator dispatcher", () => {
     try {
       const path = join(dir, "ok.yaml");
       await writeFile(path, VALID);
-      expect(
-        (await new DatasourceTypesValidator().validateFile(path)).valid,
-      ).toBe(true);
+      expect((await new TypesValidator().validateFile(path)).valid).toBe(true);
     } finally {
       await rm(dir, { force: true, recursive: true });
     }
   });
 
   test("engineConstructor requires the class export named after the facade", () => {
-    expect(() => engineConstructor({}, "DatasourceTypesValidator")).toThrow(
-      /missing export DatasourceTypesValidator/,
+    expect(() => engineConstructor({}, "TypesValidator")).toThrow(
+      /missing export TypesValidator/,
     );
     class Fake {
       async validate() {
@@ -113,10 +106,7 @@ describe("VersionedValidator dispatcher", () => {
       }
     }
     expect(
-      engineConstructor(
-        { DatasourceTypesValidator: Fake },
-        "DatasourceTypesValidator",
-      ),
+      engineConstructor({ TypesValidator: Fake }, "TypesValidator"),
     ).toBe(Fake);
   });
 
@@ -136,7 +126,7 @@ describe("VersionedValidator dispatcher", () => {
       ).valid,
     ).toBe(true);
     expect(
-      (await new ViewTypesValidator().validate(MINIMAL.ViewTypesValidator))
+      (await new DatasourceValidator().validate(MINIMAL.DatasourceValidator))
         .valid,
     ).toBe(true);
     expect(

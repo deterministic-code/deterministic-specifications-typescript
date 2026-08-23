@@ -11,18 +11,17 @@ import { Deterministic, type IDeterministic } from "../deterministic.ts";
 
 const empty = (): IDeterministic =>
   new Deterministic({
-    datasourceTypes: [],
+    types: [],
+    expandedTypes: [],
+    datasource: [],
     datasourceSeeds: new Map(),
-    viewTypes: [],
-    expandedDatasourceTypes: [],
-    expandedViewTypes: [],
     services: { generics: [], customs: [] },
     routes: {
       candidates: [],
       customs: [],
       nested: [],
       childrenOnly: new Set(),
-      datasources: [],
+      datasource: [],
     },
   });
 

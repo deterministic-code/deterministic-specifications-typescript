@@ -16,20 +16,21 @@ import {
   datasourceTypeTreeXml,
   datasourceTypeTreeYaml,
 } from "../datasource-type-tree.ts";
-import type { DatasourceType } from "../specification.ts";
+import type { Type } from "../specification.ts";
 
-const ds = (name: string, refs: string[] = []): DatasourceType => ({
+const ds = (name: string, refs: string[] = []): Type => ({
   name,
-  datasourceType: "standard",
+  tags: ["datasource_type"],
+  kind: "shaped",
   fields: refs.map((references, i) => ({
     name: `fk_${i}`,
     type: "integer",
+    kind: "primitive",
+    base: "integer",
+    isArray: false,
     isNullable: false,
     references,
   })),
-  uniqueIndexFields: [],
-  indexes: [],
-  skipMigrations: false,
 });
 
 const contacts = [

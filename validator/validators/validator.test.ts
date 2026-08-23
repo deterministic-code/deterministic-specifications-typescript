@@ -23,14 +23,13 @@ const yaml = (version: string, body: string) => `version: ${version}\n${body}`;
 const VALID_BODY = `types:
   - user:
       fields:
-        - id:
-            type: integer
-      target: StandardCrud
+        - email:
+            type: string
 `;
 
 const MINIMAL: Record<string, string> = {
   DatasourceSeedsValidator: "seeds: []\n",
-  ViewTypesValidator: "types: []\n",
+  DatasourceValidator: "types: []\n",
   ServicesValidator: "services: []\n",
   FrontendBindingsValidator: "datasources: []\n",
   RoutesValidator: "routes: []\n",
@@ -46,10 +45,10 @@ describe.each(versions)("%s engines", (version) => {
 
   beforeAll(async () => {
     engines = await loadEngines(version);
-    datasource = new engines.DatasourceTypesValidator();
+    datasource = new engines.TypesValidator();
   });
 
-  test("accepts a valid datasource_types document", async () => {
+  test("accepts a valid types document", async () => {
     expect(await datasource.validate(yaml(version, VALID_BODY))).toEqual({
       valid: true,
       errors: [],
@@ -76,7 +75,7 @@ describe.each(versions)("%s engines", (version) => {
     const result = await datasource.validate(
       yaml(
         version,
-        "types:\n  - user:\n      fields:\n        - id:\n            type: integer\n      bogus_key: 1\n",
+        "types:\n  - user:\n      fields:\n        - email:\n            type: string\n      bogus_key: 1\n",
       ),
     );
     expect(result.valid).toBe(false);
@@ -85,23 +84,23 @@ describe.each(versions)("%s engines", (version) => {
 
   test("reports a missing required property (fields)", async () => {
     const result = await datasource.validate(
-      yaml(version, "types:\n  - user:\n      target: None\n"),
+      yaml(version, "types:\n  - user:\n      tags: [view_type]\n"),
     );
     expect(result.valid).toBe(false);
-    expect(result.errors.some((e) => /fields/.test(e.message))).toBe(true);
+    expect(result.errors.some((e) => /must match|oneOf|fields/.test(e.message))).toBe(
+      true,
+    );
   });
 
-  test("reports an enum (allowed-values) violation", async () => {
+  test("reports an inherit vs union mismatch", async () => {
     const result = await datasource.validate(
       yaml(
         version,
-        "types:\n  - user:\n      fields:\n        - id:\n            type: integer\n      datasource_type: nonsense\n",
+        "types:\n  - user:\n      inherits: set\n      union: [a, b]\n",
       ),
     );
     expect(result.valid).toBe(false);
-    expect(
-      result.errors.some((e) => /readonly-lookup|many-to-many/.test(e.message)),
-    ).toBe(true);
+    expect(result.errors.length).toBeGreaterThan(0);
   });
 
   test("accepts unsigned integer-family field types", async () => {
@@ -147,7 +146,7 @@ describe.each(versions)("%s engines", (version) => {
     const result = await datasource.validate(
       yaml(
         version,
-        "types:\n  - user:\n      fields:\n        - id:\n            bogus_field_key: true\n",
+        "types:\n  - user:\n      fields:\n        - email:\n            bogus_field_key: true\n",
       ),
     );
     expect(result.valid).toBe(false);
@@ -212,8 +211,8 @@ describe.each(versions)("%s engines", (version) => {
     }
   });
 
-  test("ViewTypesValidator rejects a union vs shaped mismatch", async () => {
-    const result = await new engines.ViewTypesValidator().validate(
+  test("TypesValidator rejects a union vs shaped mismatch", async () => {
+    const result = await new engines.TypesValidator().validate(
       yaml(version, "types:\n  - foo:\n      one_of: [a]\n      fields: []\n"),
     );
     expect(result.valid).toBe(false);

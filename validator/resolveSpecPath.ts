@@ -15,9 +15,13 @@ async function fileExists(path: string): Promise<boolean> {
   );
 }
 
+const SPEC_REPO = "deterministic-specifications";
+
 /**
  * Walk ancestor directories of `start` (default: this module) for the first
- * `<ancestor>/<relPath>` that exists.
+ * `<ancestor>/<relPath>` that exists. Also checks a sibling
+ * `deterministic-specifications/<relPath>` so this package can resolve live
+ * specs and samples when it sits next to that repo.
  */
 export async function findAncestorPath(
   relPath: string,
@@ -28,6 +32,8 @@ export async function findAncestorPath(
   for (;;) {
     const candidate = join(current, relPath);
     if (await fileExists(candidate)) return candidate;
+    const sibling = join(current, SPEC_REPO, relPath);
+    if (await fileExists(sibling)) return sibling;
     if (current === root) return null;
     current = dirname(current);
   }

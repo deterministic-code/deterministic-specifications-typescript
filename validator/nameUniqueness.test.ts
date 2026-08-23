@@ -3,11 +3,11 @@ import {
   FrontendBindingsValidator,
   RoutesValidator,
   ServicesValidator,
-  ViewTypesValidator,
+  TypesValidator,
 } from "./VersionedValidator.ts";
 import { checkRouteModel } from "./routeModelSemantics.ts";
 import { checkServiceModel } from "./serviceModelSemantics.ts";
-import { checkViewModel } from "./viewModelSemantics.ts";
+import { checkTypeModel } from "./typeModelSemantics.ts";
 import { singleKey } from "./semanticsUtil.ts";
 import { parseYamlWithPositions } from "./yamlPositions.ts";
 import type { ParsedYaml } from "./SpecValidator.ts";
@@ -19,7 +19,7 @@ function parsed(text: string): ParsedYaml {
 
 describe("unique names and exclusive route dispatch", () => {
   test("rejects duplicate view names", async () => {
-    const result = await new ViewTypesValidator().validate(`version: 1.0.0
+    const result = await new TypesValidator().validate(`version: 1.0.0
 types:
   - person:
       fields:
@@ -31,7 +31,7 @@ types:
             type: integer
 `);
     expect(result.valid).toBe(false);
-    expect(result.errors[0]?.message).toBe("duplicate view 'person'");
+    expect(result.errors[0]?.message).toBe("duplicate type 'person'");
   });
 
   test("rejects duplicate route names", async () => {
@@ -123,9 +123,9 @@ routes:
         parsed("version: 1.0.0\nservices:\n  - []\n  - name: \"\"\n"),
       ).valid,
     ).toBe(true);
-    expect(checkViewModel(parsed("version: 1.0.0\n")).valid).toBe(true);
+    expect(checkTypeModel(parsed("version: 1.0.0\n")).valid).toBe(true);
     expect(
-      checkViewModel(parsed("version: 1.0.0\ntypes:\n  - []\n  - {}\n")).valid,
+      checkTypeModel(parsed("version: 1.0.0\ntypes:\n  - []\n  - {}\n")).valid,
     ).toBe(true);
     expect(singleKey(null)).toBeNull();
     expect(singleKey({})).toBeNull();
