@@ -14,9 +14,9 @@ describe("catalog", () => {
   test("engine module is engines.js and named engines are listed", () => {
     expect(VALIDATOR_ENGINE_FILE).toBe("engines.js");
     expect(VALIDATOR_ENGINES.map(([className]) => className)).toEqual([
-      "DatasourceTypesValidator",
+      "TypesValidator",
+      "DatasourceValidator",
       "DatasourceSeedsValidator",
-      "ViewTypesValidator",
       "RoutesValidator",
       "RoutesApiValidator",
       "ServicesValidator",

@@ -3,8 +3,7 @@ import type { SpecValidationError, SpecValidationResult } from "./types.ts";
 import type { ParsedYaml } from "./SpecValidator.ts";
 import { specErr } from "./semanticsUtil.ts";
 
-const KINDS = new Set(["datasource_type", "view_type"]);
-const SENTINEL = "datasource_types";
+const ACCESSORS = new Set(["type", "tag", "inherits"]);
 
 type Op = "||" | "&&" | "==" | "!=" | "(" | ")" | "eof";
 type Tok =
@@ -130,39 +129,14 @@ class Parser {
       this.#i += 1;
       return { ok: true };
     }
-    if (this.#is("ident", "type")) {
-      const next = this.#tokens[this.#i + 1];
-      if (next?.kind === "ident" && next.value === "inherits") {
-        return {
-          ok: false,
-          message: "use inherits == datasource_types (not 'type inherits')",
-        };
-      }
-      if (next?.kind === "ident" && next.value === "is") {
-        this.#i += 2;
-        let kindTok = this.#peek();
-        if (kindTok?.kind === "ident" && kindTok.value === "not") {
-          this.#i += 1;
-          kindTok = this.#peek();
-        }
-        if (kindTok?.kind !== "ident" || !KINDS.has(kindTok.value)) {
-          return {
-            ok: false,
-            message: "type is must be datasource_type or view_type",
-          };
-        }
-        this.#i += 1;
-        return { ok: true };
-      }
-      return this.#compare("type");
-    }
-    if (this.#is("ident", "inherits")) {
-      return this.#compare("inherits");
+    const tok = this.#peek();
+    if (tok?.kind === "ident" && ACCESSORS.has(tok.value)) {
+      return this.#compare(tok.value);
     }
     return { ok: false, message: this.#unexpected() };
   }
 
-  #compare(accessor: "type" | "inherits"): FilterParseResult {
+  #compare(accessor: string): FilterParseResult {
     this.#i += 1;
     if (!this.#is("op", "==") && !this.#is("op", "!=")) {
       return { ok: false, message: `expected == or != after ${accessor}` };
@@ -173,17 +147,13 @@ class Parser {
       this.#i += 1;
       return { ok: true };
     }
-    if (value?.kind === "ident" && value.value === SENTINEL) {
-      this.#i += 1;
-      return { ok: true };
-    }
     if (value?.kind === "ident") {
       return {
         ok: false,
-        message: `unquoted '${value.value}'; wrap names in double quotes or use the datasource_types sentinel`,
+        message: `unquoted '${value.value}'; wrap names in double quotes`,
       };
     }
-    return { ok: false, message: `expected a value after ${accessor}` };
+    return { ok: false, message: `expected a quoted string after ${accessor}` };
   }
 
   #peek(): Tok | undefined {
@@ -231,19 +201,12 @@ function filterEntries(
   includes.forEach((entry, i) => {
     const rec = asRecord(entry);
     if (!rec) return;
-    const blocks: Array<[string, unknown]> = [
-      ["datasource_types", rec.datasource_types],
-      ["view_type_routes", rec.view_type_routes],
-      ["view_type_services", rec.view_type_services],
-    ];
-    for (const [key, block] of blocks) {
-      const filter = asRecord(block)?.filter;
-      if (typeof filter === "string") {
-        out.push({
-          instancePath: `/includes/${i}/${key}/filter`,
-          filter,
-        });
-      }
+    const filter = asRecord(rec.types)?.filter;
+    if (typeof filter === "string") {
+      out.push({
+        instancePath: `/includes/${i}/types/filter`,
+        filter,
+      });
     }
   });
   return out;

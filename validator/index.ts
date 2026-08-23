@@ -1,8 +1,8 @@
 export { SpecValidator } from "./SpecValidator.ts";
 export {
-  DatasourceTypesValidator,
+  TypesValidator,
+  DatasourceValidator,
   DatasourceSeedsValidator,
-  ViewTypesValidator,
   RoutesValidator,
   RoutesApiValidator,
   ServicesValidator,

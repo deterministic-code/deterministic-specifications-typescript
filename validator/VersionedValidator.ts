@@ -9,7 +9,7 @@ import {
   type ParsedYaml,
 } from "./SpecValidator.ts";
 import type { SpecValidationResult, ValidateOptions } from "./types.ts";
-import { withSiblingDatasourceTypes } from "./seedSemantics.ts";
+import { withSiblingCompanions } from "./seedSemantics.ts";
 import { withIncludeFilePath } from "./includeSemantics.ts";
 
 type Engine = {
@@ -72,15 +72,15 @@ export class VersionedValidator extends FileValidator {
   }
 }
 
-export class DatasourceTypesValidator extends VersionedValidator {
+export class TypesValidator extends VersionedValidator {
   constructor() {
-    super("DatasourceTypesValidator", withIncludeFilePath);
+    super("TypesValidator", withIncludeFilePath);
   }
 }
 
-export class ViewTypesValidator extends VersionedValidator {
+export class DatasourceValidator extends VersionedValidator {
   constructor() {
-    super("ViewTypesValidator", withIncludeFilePath);
+    super("DatasourceValidator", withIncludeFilePath);
   }
 }
 
@@ -110,6 +110,6 @@ export class FrontendBindingsValidator extends VersionedValidator {
 
 export class DatasourceSeedsValidator extends VersionedValidator {
   constructor() {
-    super("DatasourceSeedsValidator", withSiblingDatasourceTypes);
+    super("DatasourceSeedsValidator", withSiblingCompanions);
   }
 }

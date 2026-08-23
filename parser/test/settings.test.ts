@@ -88,44 +88,20 @@ describe("fromSettings", () => {
 });
 
 describe("usesOptimisticConcurrency", () => {
-  it("returns false for junction and readonly-lookup tables", () => {
-    const on = fromSettings({});
-    assert.equal(
-      on.usesOptimisticConcurrency({ datasourceType: "many-to-many" }),
-      false,
-    );
-    assert.equal(
-      on.usesOptimisticConcurrency({ datasourceType: "readonly-lookup" }),
-      false,
-    );
-  });
-
   it("prefers explicit per-type flag over the global default", () => {
     const on = fromSettings({});
     const off = fromSettings({
       "datasource.use_optimistic_concurrency": "false",
     });
     assert.equal(
-      on.usesOptimisticConcurrency({
-        datasourceType: "standard",
-        optimisticConcurrency: false,
-      }),
+      on.usesOptimisticConcurrency({ useOptimisticConcurrency: false }),
       false,
     );
     assert.equal(
-      off.usesOptimisticConcurrency({
-        datasourceType: "standard",
-        optimisticConcurrency: true,
-      }),
+      off.usesOptimisticConcurrency({ useOptimisticConcurrency: true }),
       true,
     );
-    assert.equal(
-      on.usesOptimisticConcurrency({ datasourceType: "standard" }),
-      true,
-    );
-    assert.equal(
-      off.usesOptimisticConcurrency({ datasourceType: "standard" }),
-      false,
-    );
+    assert.equal(on.usesOptimisticConcurrency({}), true);
+    assert.equal(off.usesOptimisticConcurrency({}), false);
   });
 });

@@ -1,37 +1,34 @@
 import type {
-  DatasourceType,
+  DatasourceTable,
   ParsedRoutes,
   ParsedServices,
   SeedRow,
-  ViewType,
+  Type,
 } from "./specification.ts";
 
 /** Parsed deterministic YAML. One parse, then properties for each document. */
 export type IDeterministic = {
-  datasourceTypes: DatasourceType[];
+  types: Type[];
+  expandedTypes: Type[];
+  datasource: DatasourceTable[];
   datasourceSeeds: Map<string, SeedRow[]>;
-  viewTypes: ViewType[];
-  expandedDatasourceTypes: DatasourceType[];
-  expandedViewTypes: ViewType[];
   services: ParsedServices;
   routes: ParsedRoutes;
 };
 
 export class Deterministic implements IDeterministic {
-  readonly datasourceTypes: DatasourceType[];
+  readonly types: Type[];
+  readonly expandedTypes: Type[];
+  readonly datasource: DatasourceTable[];
   readonly datasourceSeeds: Map<string, SeedRow[]>;
-  readonly viewTypes: ViewType[];
-  readonly expandedDatasourceTypes: DatasourceType[];
-  readonly expandedViewTypes: ViewType[];
   readonly services: ParsedServices;
   readonly routes: ParsedRoutes;
 
   constructor(args: IDeterministic) {
-    this.datasourceTypes = args.datasourceTypes;
+    this.types = args.types;
+    this.expandedTypes = args.expandedTypes;
+    this.datasource = args.datasource;
     this.datasourceSeeds = args.datasourceSeeds;
-    this.viewTypes = args.viewTypes;
-    this.expandedDatasourceTypes = args.expandedDatasourceTypes;
-    this.expandedViewTypes = args.expandedViewTypes;
     this.services = args.services;
     this.routes = args.routes;
   }

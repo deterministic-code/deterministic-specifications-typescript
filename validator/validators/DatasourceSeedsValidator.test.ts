@@ -27,7 +27,7 @@ types:
 const validator = () => new DatasourceSeedsValidator();
 
 async function check(seeds: string, types = TYPES) {
-  return validator().validate(seeds, { datasourceTypes: types });
+  return validator().validate(seeds, { types });
 }
 
 describe("DatasourceSeedsValidator semantics", () => {
@@ -127,7 +127,7 @@ seeds:
     expect(result.errors.some((e) => /must be integer/.test(e.message))).toBe(true);
   });
 
-  test("rejects non-empty seeds when datasource_types is missing", async () => {
+  test("rejects non-empty seeds when types.yaml is missing", async () => {
     const result = await validator().validate(`version: 1.0.0
 seeds:
   - user:
@@ -135,19 +135,19 @@ seeds:
           email: a@b.c
 `);
     expect(result.valid).toBe(false);
-    expect(result.errors[0]?.message).toMatch(/datasource_types is required/);
+    expect(result.errors[0]?.message).toMatch(/types.yaml is required/);
   });
 
-  test("accepts empty seeds without datasource_types", async () => {
+  test("accepts empty seeds without types.yaml", async () => {
     expect(
       await validator().validate("version: 1.0.0\nseeds: []\n"),
     ).toEqual({ valid: true, errors: [] });
   });
 
-  test("validateFile loads a sibling datasource_types.yaml", async () => {
+  test("validateFile loads a sibling types.yaml", async () => {
     const dir = await mkdtemp(join(tmpdir(), "seeds-sibling-"));
     try {
-      await writeFile(join(dir, "datasource_types.yaml"), TYPES);
+      await writeFile(join(dir, "types.yaml"), TYPES);
       const path = join(dir, "datasource_seeds.yaml");
       await writeFile(
         path,
@@ -164,7 +164,7 @@ seeds:
     }
   });
 
-  test("validateFile reads datasourceTypesPath when no sibling is present", async () => {
+  test("validateFile reads typesPath when no sibling is present", async () => {
     const dir = await mkdtemp(join(tmpdir(), "seeds-path-"));
     try {
       const typesPath = join(dir, "types.yaml");
@@ -180,7 +180,7 @@ seeds:
 `,
       );
       expect(
-        (await validator().validateFile(path, { datasourceTypesPath: typesPath }))
+        (await validator().validateFile(path, { typesPath }))
           .valid,
       ).toBe(true);
     } finally {
@@ -203,13 +203,13 @@ seeds:
       );
       const result = await validator().validateFile(path);
       expect(result.valid).toBe(false);
-      expect(result.errors[0]?.message).toMatch(/datasource_types is required/);
+      expect(result.errors[0]?.message).toMatch(/types.yaml is required/);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
   });
 
-  test("rejects an invalid companion datasource_types document", async () => {
+  test("rejects an invalid companion types.yaml document", async () => {
     const result = await check(
       `version: 1.0.0
 seeds:
@@ -220,7 +220,7 @@ seeds:
       "version: 1.0.0\nnot_types: 1\n",
     );
     expect(result.valid).toBe(false);
-    expect(result.errors[0]?.message).toMatch(/companion datasource_types.yaml is invalid/);
+    expect(result.errors[0]?.message).toMatch(/companion types.yaml is invalid/);
   });
 
   test("rejects a duplicate table and duplicate seed id", async () => {
@@ -264,7 +264,7 @@ types:
         - email:
             type: string
             size: 256
-            is_unique: true
+            size: 256
         - count:
             type: integer
         - visits:
@@ -319,10 +319,10 @@ seeds:
     expect(bad.errors.some((e) => /visits/.test(e.message))).toBe(true);
   });
 
-  test("engine validateFile loads a sibling datasource_types.yaml", async () => {
+  test("engine validateFile loads a sibling types.yaml", async () => {
     const dir = await mkdtemp(join(tmpdir(), "seeds-engine-"));
     try {
-      await writeFile(join(dir, "datasource_types.yaml"), TYPES);
+      await writeFile(join(dir, "types.yaml"), TYPES);
       const path = join(dir, "datasource_seeds.yaml");
       await writeFile(
         path,

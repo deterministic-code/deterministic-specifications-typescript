@@ -6,12 +6,12 @@ error reports `{ line, col }`. Live (`1.0.0`) engines live in [`validators/engin
 frozen engines live under [`versions/<semver>/validators/engines.ts`](https://github.com/deterministic-code/deterministic-specifications/tree/main/versions).
 
 ```ts
-import { DatasourceTypesValidator } from "@deterministic-code/deterministic-specifications";
+import { TypesValidator } from "@deterministic-code/deterministic-specifications";
 
-const validator = new DatasourceTypesValidator();
+const validator = new TypesValidator();
 
 const fromText = await validator.validate(yamlString);
-const fromFile = await validator.validateFile("deterministic/datasource_types.yaml");
+const fromFile = await validator.validateFile("deterministic/types.yaml");
 
 // { valid: boolean, errors: [{ line, col, instancePath, message }] }
 ```
@@ -37,9 +37,9 @@ error gallery live under [`examples/`](https://github.com/deterministic-code/det
 
 | Class                       | Contract file                  |
 | --------------------------- | ------------------------------ |
-| `DatasourceTypesValidator`  | `backend/datasource-types.spec.yaml` |
+| `TypesValidator`            | `backend/types.spec.yaml` |
+| `DatasourceValidator`       | `backend/datasource.spec.yaml` |
 | `DatasourceSeedsValidator`  | `backend/datasource-seeds.spec.yaml` |
-| `ViewTypesValidator`        | `backend/view-types.spec.yaml` |
 | `RoutesValidator`           | `backend/routes.spec.yaml`     |
 | `RoutesApiValidator`        | `backend/routes-api.spec.yaml` |
 | `ServicesValidator`         | `backend/services.spec.yaml`   |
@@ -60,10 +60,10 @@ Archive a new version (moves `backend/`, `frontend/`, and this package's engine 
 npm run bump-version -- 1.1.0
 ```
 
-This package validates **schema shape** first. `DatasourceTypesValidator` then
+This package validates **schema shape** first. `TypesValidator` then
 checks `default_value` tokens and integer ranges against
 [`backend/types.yaml`](https://github.com/deterministic-code/deterministic-specifications/blob/main/backend/types.yaml). `DatasourceSeedsValidator`
-checks seed rows against the companion `datasource_types.yaml` (known tables and
-fields, value types, required vs `is_nullable` / `default_value`). Other
+checks seed rows against companion `types.yaml` (field types) and
+`datasource.yaml` (which types are tables). Other
 cross-document rules (foreign-key resolution, merged includes) stay in the
 consuming generator.

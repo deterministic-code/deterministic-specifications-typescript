@@ -1,17 +1,17 @@
 import { SpecValidator } from "../SpecValidator.ts";
 import { LIVE_VERSION } from "../specVersion.ts";
 import { DatasourceSeedsValidator } from "./DatasourceSeedsValidator.ts";
-import { DatasourceTypesValidator } from "./DatasourceTypesValidator.ts";
+import { DatasourceValidator } from "./DatasourceValidator.ts";
 import { RoutesApiValidator } from "./RoutesApiValidator.ts";
 import { RoutesValidator } from "./RoutesValidator.ts";
 import { ServicesValidator } from "./ServicesValidator.ts";
-import { ViewTypesValidator } from "./ViewTypesValidator.ts";
+import { TypesValidator } from "./TypesValidator.ts";
 
 const pinned = SpecValidator.pinnedEngines(LIVE_VERSION);
 
-export { DatasourceTypesValidator };
+export { TypesValidator };
+export { DatasourceValidator };
 export { DatasourceSeedsValidator };
-export { ViewTypesValidator };
 export { RoutesValidator };
 export { RoutesApiValidator };
 export { ServicesValidator };

@@ -13,9 +13,8 @@ const VALID = `version: 1.0.0
 types:
   - user:
       fields:
-        - id:
-            type: integer
-      target: StandardCrud
+        - email:
+            type: string
 `;
 
 describe("yamlErrorOffset / resolveAjvCtor / formatAjvError / errorFromUnknown", () => {
@@ -104,7 +103,7 @@ describe("SpecValidator constructed with an absolute spec path", () => {
   test("validates against that spec and reuses the compiled schema", async () => {
     const specPath = await resolveSpecPath(
       "backend",
-      "datasource-types.spec.yaml",
+      "types.spec.yaml",
       LIVE_VERSION,
     );
     const validator = new SpecValidator(specPath);
@@ -117,7 +116,7 @@ describe("SpecValidator constructed with an absolute spec path", () => {
   test("accepts a path thunk", async () => {
     const specPath = await resolveSpecPath(
       "backend",
-      "datasource-types.spec.yaml",
+      "types.spec.yaml",
       LIVE_VERSION,
     );
     const validator = new SpecValidator(async () => specPath);
@@ -132,22 +131,22 @@ describe("SpecValidator pinned to a version", () => {
   test("pinnedEngines returns a constructor per catalogued engine", async () => {
     const engines = SpecValidator.pinnedEngines(LIVE_VERSION);
     expect(Object.keys(engines)).toEqual([
-      "DatasourceTypesValidator",
+      "TypesValidator",
+      "DatasourceValidator",
       "DatasourceSeedsValidator",
-      "ViewTypesValidator",
       "RoutesValidator",
       "RoutesApiValidator",
       "ServicesValidator",
       "FrontendBindingsValidator",
     ]);
-    const result = await new engines.DatasourceTypesValidator().validate(VALID);
+    const result = await new engines.TypesValidator().validate(VALID);
     expect(result).toEqual({ valid: true, errors: [] });
   });
 
   test("rejects a document for a different version", async () => {
     const result = await new SpecValidator({
       subdir: "backend",
-      name: "datasource-types.spec.yaml",
+      name: "types.spec.yaml",
       version: LIVE_VERSION,
     }).validate(VALID.replace("1.0.0", "2.0.0"));
     expect(result.valid).toBe(false);

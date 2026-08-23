@@ -5,11 +5,11 @@ import { describe, expect, test } from "vitest";
 import {
   RoutesValidator,
   ServicesValidator,
-  ViewTypesValidator,
+  TypesValidator,
 } from "./VersionedValidator.ts";
 import { RoutesValidator as RoutesEngine } from "./validators/RoutesValidator.ts";
 import { ServicesValidator as ServicesEngine } from "./validators/ServicesValidator.ts";
-import { ViewTypesValidator as ViewEngine } from "./validators/ViewTypesValidator.ts";
+import { TypesValidator as TypesEngine } from "./validators/TypesValidator.ts";
 
 async function withDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
   const dir = await mkdtemp(join(tmpdir(), "inc-other-"));
@@ -20,19 +20,19 @@ async function withDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
   }
 }
 
-describe("file: include cycles on view_types, routes, and services", () => {
-  test("ViewTypesValidator validateFile rejects a circular include", async () => {
+describe("file: include cycles on types, routes, and services", () => {
+  test("TypesValidator validateFile rejects a circular include", async () => {
     await withDir(async (dir) => {
-      const path = join(dir, "view_types.yaml");
+      const path = join(dir, "types.yaml");
       await writeFile(
         path,
         `version: 1.0.0
 includes:
-  - file: view_types.yaml
+  - file: types.yaml
 types: []
 `,
       );
-      const result = await new ViewTypesValidator().validateFile(path);
+      const result = await new TypesValidator().validateFile(path);
       expect(result.valid).toBe(false);
       expect(result.errors[0]?.message).toMatch(/circular include:/);
     });
@@ -79,7 +79,7 @@ services: []
   });
 
   test("in-memory validate() still skips file includes", async () => {
-    const result = await new ViewTypesValidator().validate(`version: 1.0.0
+    const result = await new TypesValidator().validate(`version: 1.0.0
 includes:
   - file: missing.yaml
 types: []
@@ -89,16 +89,16 @@ types: []
 
   test("live engines walk includes from validateFile", async () => {
     await withDir(async (dir) => {
-      const viewPath = join(dir, "view_types.yaml");
+      const typesPath = join(dir, "types.yaml");
       await writeFile(
-        viewPath,
+        typesPath,
         `version: 1.0.0
 includes:
-  - file: view_types.yaml
+  - file: types.yaml
 types: []
 `,
       );
-      expect((await new ViewEngine().validateFile(viewPath)).valid).toBe(false);
+      expect((await new TypesEngine().validateFile(typesPath)).valid).toBe(false);
 
       const routePath = join(dir, "routes.yaml");
       await writeFile(

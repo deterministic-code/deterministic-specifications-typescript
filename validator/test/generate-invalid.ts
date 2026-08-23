@@ -18,16 +18,20 @@ type Host = Record<string, unknown>;
 
 const SPECS = [
   {
-    dir: "datasource_types",
+    dir: "types",
     subdir: "backend",
-    name: "datasource-types.spec.yaml",
+    name: "types.spec.yaml",
+  },
+  {
+    dir: "datasource",
+    subdir: "backend",
+    name: "datasource.spec.yaml",
   },
   {
     dir: "datasource_seeds",
     subdir: "backend",
     name: "datasource-seeds.spec.yaml",
   },
-  { dir: "view_types", subdir: "backend", name: "view-types.spec.yaml" },
   { dir: "routes", subdir: "backend", name: "routes.spec.yaml" },
   { dir: "services", subdir: "backend", name: "services.spec.yaml" },
   { dir: "backend_app", subdir: "backend", name: "app.spec.yaml" },
@@ -106,14 +110,22 @@ const BIND_MIN: Host = { version: "1.0.0", datasources: [] };
 type Mut = { loc: Array<string | number>; host: Host };
 
 function locFor(spec: string, path: string): Mut | null {
-  if (spec === "datasource_types") return dsLoc(path);
+  if (spec === "types") return typesLoc(path);
+  if (spec === "datasource") return datasourceLoc(path);
   if (spec === "datasource_seeds") return seedsLoc(path);
-  if (spec === "view_types") return viewLoc(path);
   if (spec === "routes") return routesLoc(path);
   if (spec === "services") return servicesLoc(path);
   if (spec === "backend_app") return appLoc(path);
   if (spec === "frontend_bindings") return bindLoc(path);
   return null;
+}
+
+function typesLoc(path: string): Mut | null {
+  return dsLoc(path) ?? viewLoc(path);
+}
+
+function datasourceLoc(path: string): Mut | null {
+  return dsLoc(path);
 }
 
 function dsLoc(path: string): Mut | null {
@@ -646,7 +658,7 @@ function routesLoc(path: string): Mut | null {
     return {
       host: {
         ...ROUTES_MIN,
-        combined_routes: [{ people: { route: "/api/people", combined_types: ["Person"] } }],
+        combined_routes: [{ people: { route: "/api/people", combines: ["Person"] } }],
       },
       loc: ["combined_routes"],
     };
@@ -705,7 +717,7 @@ function routesLoc(path: string): Mut | null {
         ? { routeClass: "PingRoute", module: "./x" }
         : key === "services"
           ? { services: ["PersonService"] }
-          : { service: "PersonService", serviceMethod: "run" };
+          : { service: "PersonService", function: "run" };
     const host: Host = {
       version: "1.0.0",
       routes: [
@@ -790,7 +802,7 @@ function routesLoc(path: string): Mut | null {
         {
           people: {
             route: "/api/people",
-            combined_types: [
+            combines: [
               "Person",
               { reports: { via: "manager", target: "person", route: "/r" } },
             ],
@@ -799,31 +811,31 @@ function routesLoc(path: string): Mut | null {
       ],
     };
     if (path.includes("combinedTypeItem/oneOf/0"))
-      return { host, loc: ["combined_routes", 0, "people", "combined_types", 0] };
+      return { host, loc: ["combined_routes", 0, "people", "combines", 0] };
     if (path.includes("properties/via"))
       return {
         host,
-        loc: ["combined_routes", 0, "people", "combined_types", 1, "reports", "via"],
+        loc: ["combined_routes", 0, "people", "combines", 1, "reports", "via"],
       };
     if (path.includes("properties/target"))
       return {
         host,
-        loc: ["combined_routes", 0, "people", "combined_types", 1, "reports", "target"],
+        loc: ["combined_routes", 0, "people", "combines", 1, "reports", "target"],
       };
     if (path.includes("properties/route") && path.includes("combinedTypeItem"))
       return {
         host,
-        loc: ["combined_routes", 0, "people", "combined_types", 1, "reports", "route"],
+        loc: ["combined_routes", 0, "people", "combines", 1, "reports", "route"],
       };
     if (path.includes("combinedTypeItem/oneOf/1/additionalProperties"))
       return {
         host,
-        loc: ["combined_routes", 0, "people", "combined_types", 1, "reports"],
+        loc: ["combined_routes", 0, "people", "combines", 1, "reports"],
       };
     if (path.includes("combinedTypeItem/oneOf/1"))
-      return { host, loc: ["combined_routes", 0, "people", "combined_types", 1] };
-    if (path.includes("properties/combined_types"))
-      return { host, loc: ["combined_routes", 0, "people", "combined_types"] };
+      return { host, loc: ["combined_routes", 0, "people", "combines", 1] };
+    if (path.includes("properties/combines"))
+      return { host, loc: ["combined_routes", 0, "people", "combines"] };
     if (path.includes("properties/route"))
       return { host, loc: ["combined_routes", 0, "people", "route"] };
     if (path.includes("combinedRouteEntry/additionalProperties"))
@@ -835,26 +847,17 @@ function routesLoc(path: string): Mut | null {
       ...ROUTES_MIN,
       includes: [
         {
-          view_type_routes: {
+          types: {
             filter: 'type == "person"',
-            eager_path: ["person.reports"],
-            eager_read_member_only: ["person.reports"],
-            eager_write_path: ["person.reports"],
           },
         },
       ],
     };
     if (path.includes("eager_read_member_only"))
-      return { host, loc: ["includes", 0, "view_type_routes", "eager_read_member_only"] };
-    if (path.includes("eager_write_path"))
-      return { host, loc: ["includes", 0, "view_type_routes", "eager_write_path"] };
-    if (path.includes("eager_path"))
-      return { host, loc: ["includes", 0, "view_type_routes", "eager_path"] };
-    if (path.includes("filter"))
-      return { host, loc: ["includes", 0, "view_type_routes", "filter"] };
-    if (path.includes("viewTypeRoutesDirectiveInclude"))
+      return { host, loc: ["includes", 0, "types", "filter"] };
+    if (path.includes("typesDirectiveInclude"))
       return { host, loc: ["includes", 0] };
-    return { host, loc: ["includes", 0, "view_type_routes"] };
+    return { host, loc: ["includes", 0, "types"] };
   }
   if (path.includes("fileInclude") || path.includes("/idInclude") || path.includes("uuidInclude") || path.includes("userNameInclude") || path.includes("includeEntry")) {
     const host: Host = { ...ROUTES_MIN, includes: [{ file: "x.yaml" }] };
@@ -972,12 +975,12 @@ function servicesLoc(path: string): Mut | null {
   if (path.includes("viewTypeServicesDirectiveInclude")) {
     const host: Host = {
       ...SERVICES_MIN,
-      includes: [{ view_type_services: { filter: "type is datasource_type" } }],
+      includes: [{ types: { filter: 'tag == "datasource_type"' } }],
     };
     if (path.includes("properties/filter"))
-      return { host, loc: ["includes", 0, "view_type_services", "filter"] };
-    if (path.includes("view_type_services") && !path.endsWith("Include"))
-      return { host, loc: ["includes", 0, "view_type_services"] };
+      return { host, loc: ["includes", 0, "types", "filter"] };
+    if (path.includes("types") && !path.endsWith("Include"))
+      return { host, loc: ["includes", 0, "types"] };
     return { host, loc: ["includes", 0] };
   }
   if (path.includes("fileInclude") || path.includes("/idInclude") || path.includes("uuidInclude") || path.includes("userNameInclude") || path.includes("includeEntry")) {

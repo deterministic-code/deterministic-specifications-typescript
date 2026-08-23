@@ -1,6 +1,5 @@
 export type OccTable = {
-  datasourceType?: string | null;
-  optimisticConcurrency?: boolean;
+  useOptimisticConcurrency?: boolean;
 };
 
 export const FRONTEND_FRAMEWORKS = [
@@ -52,13 +51,7 @@ export const fromSettings = (raw: Record<string, string>): ISettings => {
     descriptionDoc: comments === "description",
     createIndex: raw["codegen.create_index"] !== "false",
     libraryReferenceMode: raw["languages.typescript.library_reference_mode"],
-    usesOptimisticConcurrency: (table) => {
-      if (table.datasourceType === "many-to-many") return false;
-      if (table.datasourceType === "readonly-lookup") return false;
-      if (table.optimisticConcurrency !== undefined) {
-        return table.optimisticConcurrency;
-      }
-      return globalOcc;
-    },
+    usesOptimisticConcurrency: (table) =>
+      table.useOptimisticConcurrency ?? globalOcc,
   };
 };

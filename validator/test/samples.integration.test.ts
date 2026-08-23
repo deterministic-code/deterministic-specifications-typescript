@@ -3,12 +3,12 @@ import { dirname, join } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
   DatasourceSeedsValidator,
-  DatasourceTypesValidator,
+  DatasourceValidator,
   FrontendBindingsValidator,
   RoutesValidator,
   ServicesValidator,
   SpecValidator,
-  ViewTypesValidator,
+  TypesValidator,
 } from "../index.ts";
 import { parseYamlWithPositions } from "../yamlPositions.ts";
 import { findAncestorPath, resolveSpecPath } from "../resolveSpecPath.ts";
@@ -24,7 +24,7 @@ import {
 type Validator = {
   validate(
     text: string,
-    options?: { datasourceTypes?: string },
+    options?: { types?: string; datasource?: string },
   ): Promise<{
     valid: boolean;
     errors: { message: string; instancePath: string }[];
@@ -43,19 +43,19 @@ type SampleSpec = {
 
 const SAMPLE_SPECS: SampleSpec[] = [
   {
-    file: "datasource_types.yaml",
-    spec: { subdir: "backend", name: "datasource-types.spec.yaml" },
-    validator: () => new DatasourceTypesValidator(),
+    file: "types.yaml",
+    spec: { subdir: "backend", name: "types.spec.yaml" },
+    validator: () => new TypesValidator(),
+  },
+  {
+    file: "datasource.yaml",
+    spec: { subdir: "backend", name: "datasource.spec.yaml" },
+    validator: () => new DatasourceValidator(),
   },
   {
     file: "datasource_seeds.yaml",
     spec: { subdir: "backend", name: "datasource-seeds.spec.yaml" },
     validator: () => new DatasourceSeedsValidator(),
-  },
-  {
-    file: "view_types.yaml",
-    spec: { subdir: "backend", name: "view-types.spec.yaml" },
-    validator: () => new ViewTypesValidator(),
   },
   {
     file: "routes.yaml",
@@ -108,10 +108,10 @@ describe("sample documents", () => {
     const root = await samplesRoot();
     const specPath = await resolveSpecPath(
       "backend",
-      "datasource-types.spec.yaml",
+      "types.spec.yaml",
       LIVE_VERSION,
     );
-    const path = join(root, "valid", "datasource_types.semver.yaml");
+    const path = join(root, "valid", "types.semver.yaml");
     const result = await new SpecValidator(specPath).validateFile(path);
     expect(result).toEqual({ valid: true, errors: [] });
   });
@@ -183,9 +183,9 @@ describe("sample documents", () => {
 });
 
 const EXAMPLE_STEM: Record<string, () => Validator> = {
-  datasource_types: () => new DatasourceTypesValidator(),
+  types: () => new TypesValidator(),
+  datasource: () => new DatasourceValidator(),
   datasource_seeds: () => new DatasourceSeedsValidator(),
-  view_types: () => new ViewTypesValidator(),
   routes: () => new RoutesValidator(),
   services: () => new ServicesValidator(),
   "backend-app": () =>
@@ -242,12 +242,10 @@ describe("example documents", () => {
       expect(meta.includes?.length, `${file} needs expect.includes`).toBeGreaterThan(
         0,
       );
-      const result = await validatorForExample(file).validate(
-        yaml,
-        meta.datasourceTypes
-          ? { datasourceTypes: meta.datasourceTypes }
-          : undefined,
-      );
+      const result = await validatorForExample(file).validate(yaml, {
+        ...(meta.types ? { types: meta.types } : {}),
+        ...(meta.datasource ? { datasource: meta.datasource } : {}),
+      });
       expect(result.valid, file).toBe(false);
       const blob = result.errors.map((e) => e.message).join("\n");
       for (const needle of meta.includes!) {

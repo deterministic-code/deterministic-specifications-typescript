@@ -4,9 +4,9 @@ import { asRecord } from "./yamlPositions.ts";
 export const LIVE_VERSION = "1.0.0";
 
 export const VALIDATOR_ENGINES = [
-  ["DatasourceTypesValidator", "backend", "datasource-types.spec.yaml"],
+  ["TypesValidator", "backend", "types.spec.yaml"],
+  ["DatasourceValidator", "backend", "datasource.spec.yaml"],
   ["DatasourceSeedsValidator", "backend", "datasource-seeds.spec.yaml"],
-  ["ViewTypesValidator", "backend", "view-types.spec.yaml"],
   ["RoutesValidator", "backend", "routes.spec.yaml"],
   ["RoutesApiValidator", "backend", "routes-api.spec.yaml"],
   ["ServicesValidator", "backend", "services.spec.yaml"],
@@ -33,7 +33,7 @@ export function mapEngines<T>(fn: (engine: EngineDef) => T): Record<EngineName, 
 export const SPEC_FILES = [
   ...VALIDATOR_ENGINES.map(([, subdir, name]) => ({ subdir, name })),
   { subdir: "backend", name: "app.spec.yaml" },
-  { subdir: "backend", name: "types.spec.yaml" },
+  { subdir: "backend", name: "field-types.spec.yaml" },
 ];
 
 export const VALIDATOR_ENGINE_FILE = "engines.js";

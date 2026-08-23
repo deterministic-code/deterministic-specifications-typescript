@@ -5,8 +5,8 @@ import { describe, expect, test } from "vitest";
 import { parseYamlWithPositions } from "./yamlPositions.ts";
 import {
   checkSeedSemantics,
-  seedsNeedTypes,
-  withSiblingDatasourceTypes,
+  seedsNeedCompanions,
+  withSiblingCompanions,
 } from "./seedSemantics.ts";
 import type { ParsedYaml } from "./SpecValidator.ts";
 
@@ -16,36 +16,36 @@ function parsed(text: string): ParsedYaml {
 }
 
 describe("seedSemantics helpers", () => {
-  test("seedsNeedTypes is false for empty or missing seeds", () => {
-    expect(seedsNeedTypes({ version: "1.0.0", seeds: [] })).toBe(false);
-    expect(seedsNeedTypes({ version: "1.0.0" })).toBe(false);
-    expect(seedsNeedTypes(null)).toBe(false);
+  test("seedsNeedCompanions is false for empty or missing seeds", () => {
+    expect(seedsNeedCompanions({ version: "1.0.0", seeds: [] })).toBe(false);
+    expect(seedsNeedCompanions({ version: "1.0.0" })).toBe(false);
+    expect(seedsNeedCompanions(null)).toBe(false);
     expect(
-      seedsNeedTypes({
+      seedsNeedCompanions({
         version: "1.0.0",
         seeds: [{ user: [{ id1: { email: "a" } }] }],
       }),
     ).toBe(true);
   });
 
-  test("withSiblingDatasourceTypes prefers an explicit document, then a path", async () => {
+  test("withSiblingCompanions prefers an explicit document, then a path", async () => {
     const dir = await mkdtemp(join(tmpdir(), "seed-opts-"));
     try {
       const typesPath = join(dir, "t.yaml");
       await writeFile(typesPath, "version: 1.0.0\ntypes: []\n");
       expect(
-        await withSiblingDatasourceTypes(join(dir, "seeds.yaml"), {
-          datasourceTypes: "inline",
-          datasourceTypesPath: typesPath,
+        await withSiblingCompanions(join(dir, "seeds.yaml"), {
+          types: "inline",
+          typesPath: typesPath,
         }),
       ).toEqual({
-        datasourceTypes: "inline",
-        datasourceTypesPath: typesPath,
+        types: "inline",
+        typesPath: typesPath,
       });
-      const fromPath = await withSiblingDatasourceTypes(join(dir, "seeds.yaml"), {
-        datasourceTypesPath: typesPath,
+      const fromPath = await withSiblingCompanions(join(dir, "seeds.yaml"), {
+        typesPath: typesPath,
       });
-      expect(fromPath.datasourceTypes).toContain("types: []");
+      expect(fromPath.types).toContain("types: []");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

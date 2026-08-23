@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { DatasourceTypesValidator } from "./VersionedValidator.ts";
+import { TypesValidator } from "./VersionedValidator.ts";
 import { parseYamlWithPositions } from "./yamlPositions.ts";
 import {
   checkFieldDefaultSemantics,
@@ -8,7 +8,7 @@ import {
 import { loadFieldTypeCatalog } from "./fieldTypeCatalog.ts";
 import type { ParsedYaml } from "./SpecValidator.ts";
 
-const validator = () => new DatasourceTypesValidator();
+const validator = () => new TypesValidator();
 
 function parsed(text: string): ParsedYaml {
   const { doc, lineCounter } = parseYamlWithPositions(text);
