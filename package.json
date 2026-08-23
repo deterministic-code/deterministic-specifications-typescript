@@ -18,9 +18,12 @@
   "files": [
     "validator/dist",
     "validator/index.ts",
-    "validator/validators/engines.js",
+    "validator/types.ts",
+    "validator/SpecValidator.ts",
+    "validator/validators",
     "parser/dist",
-    "parser/specification-parser.ts"
+    "parser/*.ts",
+    "parser/parser"
   ],
   "scripts": {
     "prepare": "npm run build",
