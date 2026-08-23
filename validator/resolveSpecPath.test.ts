@@ -133,7 +133,14 @@ describe("published version completeness", () => {
   test("the live version has a live validator engine", async () => {
     const engineDir = await findEngineDir(LIVE_VERSION);
     expect(engineDir).not.toBeNull();
-    await access(join(engineDir!, VALIDATOR_ENGINE_FILE));
+    const js = join(engineDir!, VALIDATOR_ENGINE_FILE);
+    const ts = js.replace(/\.js$/, ".ts");
+    await expect(
+      access(js).then(
+        () => js,
+        () => access(ts).then(() => ts),
+      ),
+    ).resolves.toMatch(/engines\.(js|ts)$/);
   });
 });
 
@@ -214,10 +221,32 @@ describe("engineRelPath / resolveEngineDir", () => {
     }
   });
 
-  test("Vitest loads sibling engines.ts when present", async () => {
-    await expect(resolveEngineModulePath(LIVE_VERSION)).resolves.toMatch(
-      /engines\.ts$/,
-    );
+  test("finds the live engine when only engines.ts exists", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "engine-ts-only-"));
+    try {
+      const validators = join(dir, "validator", "validators");
+      const ts = join(validators, "engines.ts");
+      await mkdir(validators, { recursive: true });
+      await writeFile(ts, "export {}\n");
+      await expect(findEngineDir(LIVE_VERSION, dir)).resolves.toBe(validators);
+      await expect(resolveEngineModulePath(LIVE_VERSION, dir)).resolves.toBe(ts);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
+  test("prefers engines.js when present", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "engine-js-preferred-"));
+    try {
+      const validators = join(dir, "validator", "validators");
+      const js = join(validators, VALIDATOR_ENGINE_FILE);
+      await mkdir(validators, { recursive: true });
+      await writeFile(js, "export {}\n");
+      await writeFile(join(validators, "engines.ts"), "export {}\n");
+      await expect(resolveEngineModulePath(LIVE_VERSION, dir)).resolves.toBe(js);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
   });
 
   test("falls back to engines.js when no sibling .ts exists", async () => {
@@ -229,19 +258,6 @@ describe("engineRelPath / resolveEngineDir", () => {
       await expect(resolveEngineModulePath("2.0.0", dir)).resolves.toBe(js);
     } finally {
       await rm(dir, { force: true, recursive: true });
-    }
-  });
-
-  test("without VITEST, the runtime engines.js path is used", async () => {
-    const prev = process.env.VITEST;
-    delete process.env.VITEST;
-    try {
-      await expect(resolveEngineModulePath(LIVE_VERSION)).resolves.toMatch(
-        /engines\.js$/,
-      );
-    } finally {
-      if (prev === undefined) delete process.env.VITEST;
-      else process.env.VITEST = prev;
     }
   });
 

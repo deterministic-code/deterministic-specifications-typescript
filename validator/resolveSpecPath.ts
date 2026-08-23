@@ -137,18 +137,17 @@ export function engineRelPath(version: string): string {
     : join("versions", version, "validators");
 }
 
-const LIVE_ENGINE_FILE = join(
-  "validator",
-  "validators",
-  VALIDATOR_ENGINE_FILE,
-);
+const LIVE_ENGINE_JS = join("validator", "validators", VALIDATOR_ENGINE_FILE);
+const LIVE_ENGINE_TS = LIVE_ENGINE_JS.replace(/\.js$/, ".ts");
 
 export async function findEngineDir(
   version: string,
   start?: string,
 ): Promise<string | null> {
   if (isLiveVersion(version)) {
-    const engineFile = await findAncestorPath(LIVE_ENGINE_FILE, start);
+    const engineFile =
+      (await findAncestorPath(LIVE_ENGINE_JS, start)) ??
+      (await findAncestorPath(LIVE_ENGINE_TS, start));
     if (engineFile !== null) return dirname(engineFile);
   }
   return findAncestorPath(join("versions", version, "validators"), start);
@@ -166,15 +165,15 @@ export async function resolveEngineDir(
   );
 }
 
-/** Runtime module is `engines.js`. Under Vitest, load sibling `engines.ts` so coverage maps to source. */
+/** Runtime module is `engines.js` when built; otherwise sibling `engines.ts` for a source checkout. */
 export async function resolveEngineModulePath(
   version: string,
   start?: string,
 ): Promise<string> {
-  const js = join(await resolveEngineDir(version, start), VALIDATOR_ENGINE_FILE);
-  if (process.env.VITEST) {
-    const ts = js.replace(/\.js$/, ".ts");
-    if (await fileExists(ts)) return ts;
-  }
+  const dir = await resolveEngineDir(version, start);
+  const js = join(dir, VALIDATOR_ENGINE_FILE);
+  if (await fileExists(js)) return js;
+  const ts = js.replace(/\.js$/, ".ts");
+  if (await fileExists(ts)) return ts;
   return js;
 }
