@@ -316,6 +316,30 @@ describe("datasourceTypeTree", () => {
     );
   });
 
+  it("follows a composite references pair", () => {
+    const link: Type = {
+      name: "link",
+      tags: ["datasource_type"],
+      kind: "shaped",
+      fields: [
+        {
+          name: "pair",
+          type: "integer",
+          kind: "primitive",
+          base: "integer",
+          isArray: false,
+          isNullable: false,
+          references: ["", "role.id"],
+        },
+      ],
+    };
+    const user = ds("user");
+    const role = ds("role");
+    assert.deepEqual(datasourceTypeTree([user, role, link]), {
+      root: { role: { link: {} }, user: {} },
+    });
+  });
+
   it("ignores a references target that is not in the input set", () => {
     assert.deepEqual(datasourceTypeTree([ds("child", ["missing.id"])]), {
       root: { child: {} },

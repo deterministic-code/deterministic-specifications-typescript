@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { RoutesApiValidator } from "../VersionedValidator.ts";
+import { RoutesApiValidator } from "../index.ts";
 import { findAncestorPath } from "../resolveSpecPath.ts";
 
 const MINIMAL = `version: 1.0.0

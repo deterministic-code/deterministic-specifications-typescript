@@ -6,7 +6,7 @@ import {
   parseFieldTypeCatalog,
 } from "./fieldTypeCatalog.ts";
 import { resolveSpecPath } from "./resolveSpecPath.ts";
-import { LIVE_VERSION } from "./specVersion.ts";
+import { tmpdir } from "node:os";
 import { SpecValidator } from "./SpecValidator.ts";
 
 function catalogIdentifiers(schema: {
@@ -41,11 +41,11 @@ types:
   test("every spec field type has a types.yaml row and vice versa", async () => {
     const schema = parseDocument(
       await readFile(
-        await resolveSpecPath("backend", "field-types.spec.yaml", LIVE_VERSION),
+        await resolveSpecPath("backend", "field-types.spec.yaml"),
         "utf8",
       ),
     ).toJS() as Parameters<typeof catalogIdentifiers>[0];
-    const catalog = await loadFieldTypeCatalog(LIVE_VERSION);
+    const catalog = await loadFieldTypeCatalog();
     expect([...catalog.keys()].sort()).toEqual(catalogIdentifiers(schema));
   });
 
@@ -100,15 +100,15 @@ types:
     expect(mixed.get("bounded")?.defaults[0]?.description).toBe("digits");
   });
 
-  test("loadFieldTypeCatalog throws when the version has no catalog file", async () => {
-    await expect(loadFieldTypeCatalog("9.9.9")).rejects.toThrow(
-      "field type catalog not found: backend/types.yaml (version 9.9.9)",
+  test("loadFieldTypeCatalog throws when the catalog file is missing", async () => {
+    await expect(loadFieldTypeCatalog(tmpdir())).rejects.toThrow(
+      "field type catalog not found: backend/types.yaml",
     );
   });
 
   test("types.yaml is valid against field-types.spec.yaml", async () => {
-    const specPath = await resolveSpecPath("backend", "field-types.spec.yaml", LIVE_VERSION);
-    const catalogPath = await resolveSpecPath("backend", "types.yaml", LIVE_VERSION);
+    const specPath = await resolveSpecPath("backend", "field-types.spec.yaml");
+    const catalogPath = await resolveSpecPath("backend", "types.yaml");
     const result = await new SpecValidator(specPath).validate(
       await readFile(catalogPath, "utf8"),
     );
@@ -118,7 +118,7 @@ types:
   test("catalog token regexes match types.spec.yaml", async () => {
     const schema = parseDocument(
       await readFile(
-        await resolveSpecPath("backend", "types.spec.yaml", LIVE_VERSION),
+        await resolveSpecPath("backend", "types.spec.yaml"),
         "utf8",
       ),
     ).toJS() as {
@@ -131,7 +131,7 @@ types:
         decimalString: { pattern: string };
       };
     };
-    const catalog = await loadFieldTypeCatalog(LIVE_VERSION);
+    const catalog = await loadFieldTypeCatalog();
     const token = (type: string, name: string) =>
       catalog.get(type)?.defaults.find((d) => d.token === name)?.regex;
     expect(token("datetime", "Now")).toBe("^Now$");
@@ -151,7 +151,7 @@ types:
   });
 
   test("datetime and uuid expose the symbolic default tokens", async () => {
-    const catalog = await loadFieldTypeCatalog(LIVE_VERSION);
+    const catalog = await loadFieldTypeCatalog();
     expect(catalog.get("datetime")?.defaults.map((d) => d.token)).toEqual([
       "Now",
       "UtcNow",

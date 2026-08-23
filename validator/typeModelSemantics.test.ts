@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { TypesValidator } from "./VersionedValidator.ts";
+import { TypesValidator } from "./index.ts";
 import { checkTypeModel } from "./typeModelSemantics.ts";
 import { parseYamlWithPositions } from "./yamlPositions.ts";
 import type { ParsedYaml } from "./SpecValidator.ts";
@@ -36,6 +36,52 @@ describe("type model semantics", () => {
         "duplicate type 'user'",
         "duplicate field 'email' on user",
       ]),
+    );
+  });
+
+  test("rejects a circular union and a built-in reference miss", () => {
+    const result = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - a:
+      union: [b]
+      fields:
+        - ref:
+            references: set.missing
+  - b:
+      union: [a]
+      fields:
+        - loop:
+            references: a.ghost
+        - broken:
+            references: "."
+`),
+    );
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => /circular inherit/.test(e.message))).toBe(
+      true,
+    );
+    expect(result.errors.some((e) => /set/.test(e.message))).toBe(true);
+  });
+
+  test("skips a type whose body is not a mapping", () => {
+    expect(
+      checkTypeModel(parsed("version: 1.0.0\ntypes:\n  - user: 1\n")).valid,
+    ).toBe(true);
+  });
+
+  test("rejects a circular inherit chain", async () => {
+    const result = await validator().validate(doc(`types:
+  - a:
+      inherits: b
+      fields: []
+  - b:
+      inherits: a
+      fields: []
+`));
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => /circular inherit/.test(e.message))).toBe(
+      true,
     );
   });
 
@@ -130,5 +176,25 @@ describe("type model semantics", () => {
     expect(
       checkTypeModel(parsed("version: 1.0.0\ntypes:\n  - []\n  - {}\n")).valid,
     ).toBe(true);
+    const skipped = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - role:
+      fields: []
+  - user:
+      mapping:
+        id: 1
+      fields:
+        - []
+        - email:
+            type: decimal
+            size: [1, true]
+            references: 1
+        - role:
+            type: role
+            references: [1]
+`),
+    );
+    expect(skipped.valid).toBe(true);
   });
 });

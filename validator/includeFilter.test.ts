@@ -1,12 +1,13 @@
 import { describe, expect, test } from "vitest";
 import {
   checkIncludeFilters,
+  matchTypesFilter,
   parseIncludeFilter,
 } from "./includeFilter.ts";
 import { parseYamlWithPositions } from "./yamlPositions.ts";
-import { TypesValidator } from "./VersionedValidator.ts";
-import { RoutesValidator } from "./VersionedValidator.ts";
-import { ServicesValidator } from "./VersionedValidator.ts";
+import { TypesValidator } from "./index.ts";
+import { RoutesValidator } from "./index.ts";
+import { ServicesValidator } from "./index.ts";
 
 describe("parseIncludeFilter", () => {
   test.each([
@@ -76,6 +77,25 @@ includes:
     const result = checkIncludeFilters({ doc, lineCounter, data: doc.toJS() });
     expect(result.valid).toBe(false);
     expect(result.errors[0]?.instancePath).toBe("/includes/0/types/filter");
+  });
+});
+
+describe("matchTypesFilter", () => {
+  const user = { name: "user", tags: ["datasource_type"], inherits: "set" };
+  const person = { name: "person", tags: ["view_type"] };
+
+  test("matches type, tag, and inherits", () => {
+    expect(matchTypesFilter('type == "user"', user)).toBe(true);
+    expect(matchTypesFilter('type != "user"', person)).toBe(true);
+    expect(matchTypesFilter('tag == "view_type"', person)).toBe(true);
+    expect(matchTypesFilter('tag != "datasource_type"', person)).toBe(true);
+    expect(matchTypesFilter('inherits == "set"', user)).toBe(true);
+    expect(matchTypesFilter('inherits != "dictionary"', user)).toBe(true);
+  });
+
+  test("returns true when the filter is empty and false when it is invalid JS", () => {
+    expect(matchTypesFilter(undefined, user)).toBe(true);
+    expect(matchTypesFilter('type == "user" &&', user)).toBe(false);
   });
 });
 

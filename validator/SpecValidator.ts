@@ -11,13 +11,7 @@ import type {
 } from "./types.ts";
 import { parseYamlWithPositions, positionFor } from "./yamlPositions.ts";
 import { resolveSpecPath } from "./resolveSpecPath.ts";
-import {
-  isSpecRef,
-  mapEngines,
-  parseSpecVersion,
-  type EngineName,
-  type SpecRef,
-} from "./specVersion.ts";
+import { isSpecRef, type SpecRef } from "./specVersion.ts";
 
 type SpecPathFn = () => Promise<string>;
 type SpecPathSource = string | SpecPathFn | SpecRef;
@@ -186,10 +180,9 @@ export abstract class FileValidator {
  * (draft 2020-12, authored in YAML). The base class carries AJV compilation
  * and source-position mapping so every error reports `{ line, col }`.
  *
- * Pass a `{ subdir, name, version }` ref to pin this engine to one contract
- * version. The document's `version` must match; the matching snapshot is
- * loaded and nothing else. Pass an absolute path (or path thunk) to validate
- * against a spec that lives outside this package — the pin check is skipped.
+ * Pass a `{ subdir, name }` ref to resolve the live spec file. Pass an
+ * absolute path (or path thunk) to validate against a spec that lives
+ * outside this package.
  *
  * Optional `afterSchema` checks run only after JSON Schema succeeds.
  * `fileOptions` is applied by {@link FileValidator.validateFile}.
@@ -238,7 +231,7 @@ export class SpecValidator extends FileValidator {
   }
 
   async #resolvePath(
-    data: unknown,
+    _data: unknown,
     doc: YamlDoc,
     lineCounter: YamlLines,
   ): Promise<{ path: string } | SpecValidationResult> {
@@ -246,38 +239,11 @@ export class SpecValidator extends FileValidator {
       return { path: await this.#resolveFixedPath() };
     }
     const ref = this.#specRef!;
-    const parsed = parseSpecVersion(data);
-    if (!parsed.ok) return versionFail(doc, lineCounter, parsed.message);
-    if (parsed.version !== ref.version) {
-      return versionFail(
-        doc,
-        lineCounter,
-        `version must be ${ref.version} (this engine is pinned to ${ref.version})`,
-      );
-    }
     try {
-      return {
-        path: await resolveSpecPath(ref.subdir, ref.name, ref.version),
-      };
+      return { path: await resolveSpecPath(ref.subdir, ref.name) };
     } catch (err) {
       return versionFail(doc, lineCounter, errorFromUnknown(err));
     }
-  }
-
-  static pinned(ref: SpecRef): new () => SpecValidator {
-    return class extends SpecValidator {
-      constructor() {
-        super(ref);
-      }
-    };
-  }
-
-  static pinnedEngines(
-    version: string,
-  ): Record<EngineName, new () => SpecValidator> {
-    return mapEngines(({ subdir, name }) =>
-      SpecValidator.pinned({ subdir, name, version }),
-    );
   }
 
   async #compiledSpec(specPath: string): Promise<ValidateFn> {

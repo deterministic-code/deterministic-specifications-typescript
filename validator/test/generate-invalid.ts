@@ -11,7 +11,6 @@ import {
   type Schema,
 } from "./schemaCoverage.ts";
 import { findAncestorPath, resolveSpecPath } from "../resolveSpecPath.ts";
-import { LIVE_VERSION } from "../specVersion.ts";
 import { readFile } from "node:fs/promises";
 
 type Host = Record<string, unknown>;
@@ -1256,7 +1255,7 @@ const samplesRoot = dirname((await findAncestorPath("samples/valid"))!);
 
 for (const spec of SPECS) {
   const schema = loadSchema(
-    await readFile(await resolveSpecPath(spec.subdir, spec.name, LIVE_VERSION), "utf8"),
+    await readFile(await resolveSpecPath(spec.subdir, spec.name), "utf8"),
   ) as Schema;
   const points = [...collectErrorPoints(schema)].sort();
   const outDir = join(samplesRoot, "invalid", spec.dir);

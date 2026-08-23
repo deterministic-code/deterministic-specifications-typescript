@@ -1,24 +1,17 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
-import { beforeAll, describe, expect, test } from "vitest";
-import { resolveEngineModulePath, listSpecVersions } from "../resolveSpecPath.ts";
-import type { SpecValidator } from "../SpecValidator.ts";
-import {
-  LIVE_VERSION,
-  VALIDATOR_ENGINES,
-} from "../specVersion.ts";
+import { describe, expect, test } from "vitest";
+import { TypesValidator } from "./TypesValidator.ts";
+import { DatasourceSeedsValidator } from "./DatasourceSeedsValidator.ts";
+import { DatasourceValidator } from "./DatasourceValidator.ts";
+import { FrontendBindingsValidator } from "./FrontendBindingsValidator.ts";
+import { RoutesApiValidator } from "./RoutesApiValidator.ts";
+import { RoutesValidator } from "./RoutesValidator.ts";
+import { ServicesValidator } from "./ServicesValidator.ts";
+import { VALIDATOR_ENGINES } from "../specVersion.ts";
 
-type Engines = Record<string, new () => SpecValidator>;
-
-async function loadEngines(version: string): Promise<Engines> {
-  return (await import(
-    pathToFileURL(await resolveEngineModulePath(version)).href
-  )) as Engines;
-}
-
-const yaml = (version: string, body: string) => `version: ${version}\n${body}`;
+const yaml = (body: string) => `version: 1.0.0\n${body}`;
 
 const VALID_BODY = `types:
   - user:
@@ -26,6 +19,16 @@ const VALID_BODY = `types:
         - email:
             type: string
 `;
+
+const ENGINES = {
+  TypesValidator,
+  DatasourceValidator,
+  DatasourceSeedsValidator,
+  RoutesValidator,
+  RoutesApiValidator,
+  ServicesValidator,
+  FrontendBindingsValidator,
+} as const;
 
 const MINIMAL: Record<string, string> = {
   DatasourceSeedsValidator: "seeds: []\n",
@@ -36,29 +39,14 @@ const MINIMAL: Record<string, string> = {
   RoutesApiValidator: "routes: []\ncomponents: {}\n",
 };
 
-const versions = await listSpecVersions();
-
-describe.each(versions)("%s engines", (version) => {
-  let engines: Engines;
-  let datasource: SpecValidator;
-  const other = version === LIVE_VERSION ? "2.0.0" : LIVE_VERSION;
-
-  beforeAll(async () => {
-    engines = await loadEngines(version);
-    datasource = new engines.TypesValidator();
-  });
+describe("live engines", () => {
+  const datasource = new TypesValidator();
 
   test("accepts a valid types document", async () => {
-    expect(await datasource.validate(yaml(version, VALID_BODY))).toEqual({
+    expect(await datasource.validate(yaml(VALID_BODY))).toEqual({
       valid: true,
       errors: [],
     });
-  });
-
-  test("rejects a document pinned to a different version", async () => {
-    const result = await datasource.validate(yaml(other, VALID_BODY));
-    expect(result.valid).toBe(false);
-    expect(result.errors[0]?.message).toContain(`pinned to ${version}`);
   });
 
   test("reports a positioned error for a missing top-level required key", async () => {
@@ -74,7 +62,6 @@ describe.each(versions)("%s engines", (version) => {
   test("reports an unexpected-property error (additionalProperties)", async () => {
     const result = await datasource.validate(
       yaml(
-        version,
         "types:\n  - user:\n      fields:\n        - email:\n            type: string\n      bogus_key: 1\n",
       ),
     );
@@ -84,7 +71,7 @@ describe.each(versions)("%s engines", (version) => {
 
   test("reports a missing required property (fields)", async () => {
     const result = await datasource.validate(
-      yaml(version, "types:\n  - user:\n      tags: [view_type]\n"),
+      yaml("types:\n  - user:\n      tags: [view_type]\n"),
     );
     expect(result.valid).toBe(false);
     expect(result.errors.some((e) => /must match|oneOf|fields/.test(e.message))).toBe(
@@ -94,10 +81,7 @@ describe.each(versions)("%s engines", (version) => {
 
   test("reports an inherit vs union mismatch", async () => {
     const result = await datasource.validate(
-      yaml(
-        version,
-        "types:\n  - user:\n      inherits: set\n      union: [a, b]\n",
-      ),
+      yaml("types:\n  - user:\n      inherits: set\n      union: [a, b]\n"),
     );
     expect(result.valid).toBe(false);
     expect(result.errors.length).toBeGreaterThan(0);
@@ -105,9 +89,7 @@ describe.each(versions)("%s engines", (version) => {
 
   test("accepts unsigned integer-family field types", async () => {
     const result = await datasource.validate(
-      yaml(
-        version,
-        `types:
+      yaml(`types:
   - sample:
       fields:
         - count:
@@ -119,24 +101,20 @@ describe.each(versions)("%s engines", (version) => {
         - small_count:
             type: unsignedsmallinteger
             min_size: 0
-`,
-      ),
+`),
     );
     expect(result).toEqual({ valid: true, errors: [] });
   });
 
   test("rejects a negative default_value on unsignedinteger", async () => {
     const result = await datasource.validate(
-      yaml(
-        version,
-        `types:
+      yaml(`types:
   - sample:
       fields:
         - count:
             type: unsignedinteger
             default_value: -1
-`,
-      ),
+`),
     );
     expect(result.valid).toBe(false);
     expect(result.errors.length).toBeGreaterThan(0);
@@ -145,7 +123,6 @@ describe.each(versions)("%s engines", (version) => {
   test("reports a positioned error for a field-shape mismatch", async () => {
     const result = await datasource.validate(
       yaml(
-        version,
         "types:\n  - user:\n      fields:\n        - email:\n            bogus_field_key: true\n",
       ),
     );
@@ -156,7 +133,7 @@ describe.each(versions)("%s engines", (version) => {
   });
 
   test("reports a type mismatch (scalar where an array is required)", async () => {
-    const result = await datasource.validate(yaml(version, "types: not-a-list\n"));
+    const result = await datasource.validate(yaml("types: not-a-list\n"));
     expect(result.valid).toBe(false);
     expect(result.errors.length).toBeGreaterThan(0);
   });
@@ -182,10 +159,10 @@ describe.each(versions)("%s engines", (version) => {
     const dir = await mkdtemp(join(tmpdir(), "spec-validate-"));
     try {
       const path = join(dir, "valid.yaml");
-      await writeFile(path, yaml(version, VALID_BODY));
+      await writeFile(path, yaml(VALID_BODY));
       expect((await datasource.validateFile(path)).valid).toBe(true);
     } finally {
-      await rm(dir, { force: true, recursive: true });
+      await rm(dir, { recursive: true, force: true });
     }
   });
 
@@ -198,31 +175,28 @@ describe.each(versions)("%s engines", (version) => {
       expect(result.valid).toBe(false);
       expect(result.errors.length).toBeGreaterThan(0);
     } finally {
-      await rm(dir, { force: true, recursive: true });
+      await rm(dir, { recursive: true, force: true });
     }
   });
 
   test("other spec validators accept a minimal document", async () => {
     for (const [className, body] of Object.entries(MINIMAL)) {
-      if (typeof engines[className] !== "function") continue;
-      expect(
-        (await new engines[className]().validate(yaml(version, body))).valid,
-      ).toBe(true);
+      const Ctor = ENGINES[className as keyof typeof ENGINES];
+      expect((await new Ctor().validate(yaml(body))).valid).toBe(true);
     }
   });
 
   test("TypesValidator rejects a union vs shaped mismatch", async () => {
-    const result = await new engines.TypesValidator().validate(
-      yaml(version, "types:\n  - foo:\n      one_of: [a]\n      fields: []\n"),
+    const result = await new TypesValidator().validate(
+      yaml("types:\n  - foo:\n      one_of: [a]\n      fields: []\n"),
     );
     expect(result.valid).toBe(false);
     expect(result.errors.length).toBeGreaterThan(0);
   });
 
   test("RoutesValidator rejects a nested route-shape mismatch", async () => {
-    const result = await new engines.RoutesValidator().validate(
+    const result = await new RoutesValidator().validate(
       yaml(
-        version,
         "routes:\n  - custom_route:\n      methods: [GET]\n      path: /x\n      bogus: true\n",
       ),
     );
@@ -232,8 +206,8 @@ describe.each(versions)("%s engines", (version) => {
 
   test("every spec validator rejects an empty document", async () => {
     for (const [className] of VALIDATOR_ENGINES) {
-      if (typeof engines[className] !== "function") continue;
-      const result = await new engines[className]().validate("");
+      const Ctor = ENGINES[className];
+      const result = await new Ctor().validate("");
       expect(result.valid).toBe(false);
       expect(result.errors.length).toBeGreaterThan(0);
     }

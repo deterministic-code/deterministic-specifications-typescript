@@ -1,5 +1,4 @@
 import { SpecValidator } from "../SpecValidator.ts";
-import { LIVE_VERSION } from "../specVersion.ts";
 import { checkFieldDefaultSemantics } from "../fieldDefaultSemantics.ts";
 import { checkTypeModel } from "../typeModelSemantics.ts";
 import {
@@ -11,7 +10,7 @@ import { checkIncludeFilters } from "../includeFilter.ts";
 /**
  * Live engine for `types.yaml`: JSON Schema first, then default_value
  * tokens/ranges, then inherit/union/one_of/reference checks, then include
- * filters and `file:` cycles. Pinned to {@link LIVE_VERSION}.
+ * filters and `file:` cycles.
  */
 export class TypesValidator extends SpecValidator {
   constructor() {
@@ -19,7 +18,6 @@ export class TypesValidator extends SpecValidator {
       {
         subdir: "backend",
         name: "types.spec.yaml",
-        version: LIVE_VERSION,
       },
       [
         checkFieldDefaultSemantics,

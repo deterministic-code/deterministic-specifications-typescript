@@ -13,10 +13,6 @@
     "./parser": {
       "types": "./parser/specification-parser.ts",
       "import": "./parser/dist/specification-parser.js"
-    },
-    "./parser/specification": {
-      "types": "./parser/specification.ts",
-      "import": "./parser/dist/specification.js"
     }
   },
   "files": [
@@ -24,15 +20,14 @@
     "validator/index.ts",
     "validator/validators/engines.js",
     "parser/dist",
-    "parser/specification-parser.ts",
-    "parser/specification.ts"
+    "parser/specification-parser.ts"
   ],
   "scripts": {
     "prepare": "npm run build",
     "build": "npm run build:validator && npm run build:engines && npm run build:parser",
     "build:validator": "esbuild validator/index.ts --bundle --format=esm --platform=node --packages=external --outfile=validator/dist/index.js",
     "build:engines": "esbuild validator/validators/engines.ts --bundle --format=esm --platform=node --packages=external --outfile=validator/validators/engines.js",
-    "build:parser": "esbuild parser/specification-parser.ts --bundle --format=esm --platform=node --packages=external --outfile=parser/dist/specification-parser.js && esbuild parser/specification.ts --bundle --format=esm --platform=node --packages=external --outfile=parser/dist/specification.js"
+    "build:parser": "esbuild parser/specification-parser.ts --bundle --format=esm --platform=node --packages=external --outfile=parser/dist/specification-parser.js"
   },
   "dependencies": {
     "ajv": "^8.18.0",

@@ -1,6 +1,24 @@
 export type { IDeterministic } from "./deterministic.ts";
-export { Deterministic } from "./deterministic.ts";
-export type { IDeterministicReader } from "./deterministic-reader.ts";
 export { DeterministicParser } from "./parser/specification-parser.ts";
-export * from "./specification.ts";
-
+export type {
+  CustomRouteEntry,
+  CustomServiceEntry,
+  DatasourceFieldOverlay,
+  DatasourceIndex,
+  DatasourceTable,
+  DirectFkDescriptor,
+  FieldKind,
+  M2mDescriptor,
+  NestedRouteDescriptor,
+  ParsedRoutes,
+  ParsedServices,
+  RouteByField,
+  RouteCandidate,
+  SeedRow,
+  SeedValue,
+  ServiceByField,
+  ServiceCandidate,
+  Type,
+  TypeField,
+  TypeKind,
+} from "./specification.ts";

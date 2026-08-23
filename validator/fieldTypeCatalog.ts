@@ -82,19 +82,18 @@ export function parseFieldTypeCatalog(text: string): Map<string, FieldType> {
 const cache = new Map<string, Promise<Map<string, FieldType>>>();
 
 export async function loadFieldTypeCatalog(
-  version: string,
+  start?: string,
 ): Promise<Map<string, FieldType>> {
-  const hit = cache.get(version);
+  const key = start ?? "";
+  const hit = cache.get(key);
   if (hit) return hit;
   const pending = (async () => {
-    const path = await findSpecPath("backend", "types.yaml", version);
+    const path = await findSpecPath("backend", "types.yaml", start);
     if (!path) {
-      throw new Error(
-        `field type catalog not found: backend/types.yaml (version ${version})`,
-      );
+      throw new Error("field type catalog not found: backend/types.yaml");
     }
     return parseFieldTypeCatalog(await readFile(path, "utf8"));
   })();
-  cache.set(version, pending);
+  cache.set(key, pending);
   return pending;
 }

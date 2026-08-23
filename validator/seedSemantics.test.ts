@@ -46,6 +46,13 @@ describe("seedSemantics helpers", () => {
         typesPath: typesPath,
       });
       expect(fromPath.types).toContain("types: []");
+      const dsPath = join(dir, "ds.yaml");
+      await writeFile(dsPath, "version: 1.0.0\ntypes: []\n");
+      const withDs = await withSiblingCompanions(join(dir, "seeds.yaml"), {
+        types: "inline",
+        datasourcePath: dsPath,
+      });
+      expect(withDs.datasource).toContain("types: []");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -259,6 +266,114 @@ seeds:
     expect(result.errors.some((e) => /auto-injected/.test(e.message))).toBe(true);
     expect(result.errors.some((e) => /tiny/.test(e.message))).toBe(true);
     expect(result.errors.some((e) => /big/.test(e.message))).toBe(true);
+  });
+
+  test("covers table-name and type-candidate edge cases", () => {
+    const seeds = parsed(`version: 1.0.0
+seeds:
+  - user:
+      - id1:
+          email: a
+`);
+    expect(
+      checkSeedSemantics(seeds, { types: "nope" }, {
+        includes: [{ types: { filter: 'type == "user"' } }],
+      }).valid,
+    ).toBe(false);
+    expect(
+      checkSeedSemantics(seeds, { types: [{ user: { fields: [] } }] }, {
+        types: "nope",
+      }).valid,
+    ).toBe(false);
+    expect(
+      checkSeedSemantics(
+        seeds,
+        {
+          types: [
+            null,
+            {},
+            { "": {} },
+            { skip: 1 },
+            { user: { fields: [{ email: { type: "string" } }] } },
+          ],
+        },
+        {
+          includes: [{ types: { filter: 'type == "user"' } }],
+        },
+      ).valid,
+    ).toBe(true);
+  });
+
+  test("ignores a non-array includes list when resolving seed tables", () => {
+    const seeds = parsed(`version: 1.0.0
+seeds:
+  - user:
+      - id1:
+          email: a
+`);
+    const result = checkSeedSemantics(
+      seeds,
+      { types: [{ user: { fields: [{ email: { type: "string" } }] } }] },
+      { includes: [{ types: { filter: 1 } }, {}], types: [{ user: {} }] },
+    );
+    expect(result.valid).toBe(true);
+  });
+
+  test("datasource table names skip malformed entries when no filter is present", () => {
+    const seeds = parsed(`version: 1.0.0
+seeds:
+  - user:
+      - id1:
+          email: a
+`);
+    const result = checkSeedSemantics(
+      seeds,
+      { types: [{ user: { fields: [{ email: { type: "string" } }] } }] },
+      { types: [null, {}, { user: {} }] },
+    );
+    expect(result.valid).toBe(true);
+  });
+
+  test("a types filter on datasource.yaml selects seed tables", () => {
+    const seeds = parsed(`version: 1.0.0
+seeds:
+  - project:
+      - id1:
+          name: Inbox
+`);
+    const types = {
+      types: [
+        {
+          project: {
+            tags: ["datasource_type"],
+            fields: [{ name: { type: "string" } }],
+          },
+        },
+        {
+          ghost: {
+            tags: ["view_type"],
+            fields: [{ name: { type: "string" } }],
+          },
+        },
+      ],
+    };
+    const datasource = {
+      includes: [{ types: { filter: 'tag == "datasource_type"' } }],
+      types: [],
+    };
+    expect(checkSeedSemantics(seeds, types, datasource)).toEqual({
+      valid: true,
+      errors: [],
+    });
+    const ghost = parsed(`version: 1.0.0
+seeds:
+  - ghost:
+      - id1:
+          name: x
+`);
+    const rejected = checkSeedSemantics(ghost, types, datasource);
+    expect(rejected.valid).toBe(false);
+    expect(rejected.errors[0]?.message).toMatch(/not in datasource.yaml/);
   });
 
   test("row values that are not mappings are treated as empty", () => {

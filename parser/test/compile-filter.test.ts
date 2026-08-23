@@ -19,6 +19,10 @@ describe("compileTypesFilter", () => {
     assert.equal(byTag(cand("person", ["view_type"])), true);
     assert.equal(byTag(cand("user", ["datasource_type"])), false);
     assert.equal(byInherits(cand("user", ["datasource_type"], "set")), true);
+    assert.equal(
+      compileTypesFilter('inherits != "set"')(cand("user", [], "set")),
+      false,
+    );
     assert.equal(notTag(cand("person", ["view_type"])), true);
     assert.equal(notTag(cand("user", ["datasource_type"])), false);
   });
@@ -33,6 +37,7 @@ describe("compileTypesFilter", () => {
 
   it("returns true when the filter is empty", () => {
     assert.equal(compileTypesFilter(undefined)(cand("user")), true);
+    assert.equal(compileTypesFilter("1==1")(cand("user")), true);
   });
 
   it("rejects unknown identifiers", () => {
