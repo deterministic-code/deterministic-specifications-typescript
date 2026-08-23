@@ -8,12 +8,34 @@
     "./package.json": "./package.json",
     ".": {
       "types": "./validator/index.ts",
-      "import": "./validator/index.ts"
+      "import": "./validator/dist/index.js"
     },
     "./parser": {
       "types": "./parser/specification-parser.ts",
-      "import": "./parser/specification-parser.ts"
+      "import": "./parser/dist/specification-parser.js"
     }
+  },
+  "files": [
+    "validator/dist",
+    "validator/index.ts",
+    "validator/validators/engines.js",
+    "parser/dist",
+    "parser/specification-parser.ts"
+  ],
+  "scripts": {
+    "prepare": "npm run build",
+    "build": "npm run build:validator && npm run build:engines && npm run build:parser",
+    "build:validator": "esbuild validator/index.ts --bundle --format=esm --platform=node --packages=external --outfile=validator/dist/index.js",
+    "build:engines": "esbuild validator/validators/engines.ts --bundle --format=esm --platform=node --packages=external --outfile=validator/validators/engines.js",
+    "build:parser": "esbuild parser/specification-parser.ts --bundle --format=esm --platform=node --packages=external --outfile=parser/dist/specification-parser.js"
+  },
+  "dependencies": {
+    "ajv": "^8.18.0",
+    "pluralize": "^8.0.0",
+    "yaml": "^2.6.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
   },
   "repository": {
     "type": "git",
