@@ -1,16 +1,12 @@
 export { SpecValidator } from "./SpecValidator.ts";
-export {
-  TypesValidator,
-  DatasourceValidator,
-  DatasourceSeedsValidator,
-  RoutesValidator,
-  RoutesApiValidator,
-  ServicesValidator,
-  FrontendBindingsValidator,
-} from "./VersionedValidator.ts";
+export { TypesValidator } from "./validators/TypesValidator.ts";
+export { DatasourceValidator } from "./validators/DatasourceValidator.ts";
+export { DatasourceSeedsValidator } from "./validators/DatasourceSeedsValidator.ts";
+export { RoutesValidator } from "./validators/RoutesValidator.ts";
+export { RoutesApiValidator } from "./validators/RoutesApiValidator.ts";
+export { ServicesValidator } from "./validators/ServicesValidator.ts";
+export { FrontendBindingsValidator } from "./validators/FrontendBindingsValidator.ts";
 export type {
-  Position,
   SpecValidationError,
   SpecValidationResult,
-  ValidateOptions,
 } from "./types.ts";

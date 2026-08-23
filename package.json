@@ -13,10 +13,6 @@
     "./parser": {
       "types": "./parser/specification-parser.ts",
       "import": "./parser/specification-parser.ts"
-    },
-    "./parser/specification": {
-      "types": "./parser/specification.ts",
-      "import": "./parser/specification.ts"
     }
   },
   "repository": {

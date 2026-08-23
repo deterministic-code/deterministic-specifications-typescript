@@ -212,6 +212,47 @@ function filterEntries(
   return out;
 }
 
+export type FilterCandidate = {
+  name: string;
+  tags: string[];
+  inherits?: string;
+};
+
+export function matchTypesFilter(
+  expr: string | undefined,
+  cand: FilterCandidate,
+): boolean {
+  if (!expr) return true;
+  const placeholders: string[] = [];
+  const withStrings = expr.replace(/"[^"]*"/g, (m) => {
+    placeholders.push(m);
+    return `__STR${placeholders.length - 1}__`;
+  });
+  const rewritten = withStrings
+    .replace(/\btype\s*(==|!=)\s*(__STR\d+__)/g, (_, op, idx) => {
+      const jsOp = op === "==" ? "===" : "!==";
+      return `(__name ${jsOp} ${idx})`;
+    })
+    .replace(/\btag\s*==\s*(__STR\d+__)/g, (_, idx) => `__tags.includes(${idx})`)
+    .replace(/\btag\s*!=\s*(__STR\d+__)/g, (_, idx) => `!__tags.includes(${idx})`)
+    .replace(/\binherits\s*(==|!=)\s*(__STR\d+__)/g, (_, op, idx) => {
+      const jsOp = op === "==" ? "===" : "!==";
+      return `(__inherits ${jsOp} ${idx})`;
+    })
+    .replace(/__STR(\d+)__/g, (_, idx) => placeholders[Number(idx)]!);
+  try {
+    const fn = new Function(
+      "__name",
+      "__tags",
+      "__inherits",
+      `return (${rewritten});`,
+    ) as (name: string, tags: string[], inherits: string) => boolean;
+    return Boolean(fn(cand.name, cand.tags, cand.inherits ?? ""));
+  } catch {
+    return false;
+  }
+}
+
 export function checkIncludeFilters(parsed: ParsedYaml): SpecValidationResult {
   const errors: SpecValidationError[] = [];
   for (const { instancePath, filter } of filterEntries(parsed.data)) {

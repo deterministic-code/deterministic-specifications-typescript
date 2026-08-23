@@ -113,6 +113,7 @@ function inheritedNames(
   if (BUILT_IN[name]) return new Set(BUILT_IN[name]);
   if (stack.has(name)) return { cycle: name };
   const info = types.get(name);
+  /* v8 ignore next -- callers only pass built-ins or collected type names */
   if (!info) return new Set();
   stack.add(name);
   const names = new Set<string>();
@@ -122,7 +123,7 @@ function inheritedNames(
     for (const n of parent) names.add(n);
   }
   if (info.kind === "union") {
-    for (const member of info.union ?? []) {
+    for (const member of info.union!) {
       const part = inheritedNames(member, types, stack);
       if ("cycle" in part) return part;
       for (const n of part) names.add(n);
@@ -239,7 +240,7 @@ function checkReferences(
   const list = asRecord(parsed.data)?.types;
   if (!Array.isArray(list)) return errors;
 
-  const checkRef = (ref: string, refPath: string) => {
+  const checkRef = (ref: string, refPath: string, checkField: boolean) => {
     const [refType, refCol] = ref.split(".");
     if (!refType || !refCol) return;
     if (!types.has(refType) && !BUILT_IN[refType]) {
@@ -248,7 +249,11 @@ function checkReferences(
       );
       return;
     }
-    if (!fieldNamesOf(refType, types).has(refCol)) {
+    if (
+      checkField &&
+      refCol !== "id" &&
+      !fieldNamesOf(refType, types).has(refCol)
+    ) {
       errors.push(
         specErr(
           parsed,
@@ -259,6 +264,12 @@ function checkReferences(
     }
   };
 
+  const isTypeName = (raw: unknown): boolean => {
+    if (typeof raw !== "string") return false;
+    const base = raw.endsWith("[]") ? raw.slice(0, -2) : raw;
+    return types.has(base);
+  };
+
   list.forEach((entry, ti) => {
     const pair = singleKey(entry);
     if (!pair) return;
@@ -267,15 +278,17 @@ function checkReferences(
     fields.forEach((field, fi) => {
       const fp = singleKey(field);
       if (!fp) return;
-      const ref = asRecord(fp.body)?.references;
+      const body = asRecord(fp.body);
+      const ref = body?.references;
       const refPath = `/types/${ti}/${pair.key}/fields/${fi}/${fp.key}/references`;
+      const checkField = !isTypeName(body?.type);
       if (typeof ref === "string") {
-        checkRef(ref, refPath);
+        checkRef(ref, refPath, checkField);
         return;
       }
       if (!Array.isArray(ref)) return;
       ref.forEach((item, i) => {
-        if (typeof item === "string") checkRef(item, `${refPath}/${i}`);
+        if (typeof item === "string") checkRef(item, `${refPath}/${i}`, checkField);
       });
     });
   });

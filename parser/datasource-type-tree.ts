@@ -23,7 +23,7 @@ const ROOT = "root";
 
 const refTargets = (references: string | [string, string]): string[] =>
   (Array.isArray(references) ? references : [references]).map(
-    (ref) => ref.split(".")[0] ?? "",
+    (ref) => ref.split(".")[0] || "",
   );
 
 const referencedParents = (

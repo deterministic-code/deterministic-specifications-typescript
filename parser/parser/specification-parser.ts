@@ -566,9 +566,9 @@ class Parser {
     return parts.join("_");
   }
 
-  #entityHasField(type: Type | undefined, fieldName: string): boolean {
+  #entityHasField(type: Type, fieldName: string): boolean {
     if (fieldName === "id") return true;
-    return type?.fields.some((f) => f.name === fieldName) ?? false;
+    return type.fields.some((f) => f.name === fieldName);
   }
 
   #parseVerb(token: string): { methods: string[] | null; body: string } {
@@ -666,7 +666,7 @@ class Parser {
 
   #refParent(references: string | [string, string] | undefined): string | null {
     if (typeof references !== "string") return null;
-    return references.split(".")[0] ?? null;
+    return references.split(".")[0]!;
   }
 
   #findForeignKeyTo(child: Type, parentName: string): string | null {

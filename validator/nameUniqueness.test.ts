@@ -4,7 +4,7 @@ import {
   RoutesValidator,
   ServicesValidator,
   TypesValidator,
-} from "./VersionedValidator.ts";
+} from "./index.ts";
 import { checkRouteModel } from "./routeModelSemantics.ts";
 import { checkServiceModel } from "./serviceModelSemantics.ts";
 import { checkTypeModel } from "./typeModelSemantics.ts";

@@ -6,7 +6,7 @@ import {
   RoutesValidator,
   ServicesValidator,
   TypesValidator,
-} from "./VersionedValidator.ts";
+} from "./index.ts";
 import { RoutesValidator as RoutesEngine } from "./validators/RoutesValidator.ts";
 import { ServicesValidator as ServicesEngine } from "./validators/ServicesValidator.ts";
 import { TypesValidator as TypesEngine } from "./validators/TypesValidator.ts";

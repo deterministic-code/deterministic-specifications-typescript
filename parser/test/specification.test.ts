@@ -88,6 +88,69 @@ describe("specification helpers", () => {
     );
   });
 
+  it("skips a duplicate lookup field and defaults type when the field is missing", () => {
+    const type = shaped("user", [
+      {
+        name: "email",
+        type: "string",
+        kind: "primitive",
+        base: "string",
+        isArray: false,
+        isNullable: false,
+        size: 256,
+      },
+    ]);
+    assert.deepEqual(
+      uniqueLookupFields(type, {
+        name: "user",
+        fields: [
+          { name: "email", isUnique: true },
+          { name: "missing", isUnique: true },
+        ],
+        indexes: [],
+        uniqueIndexFields: ["email"],
+      }),
+      [
+        { field: "email", type: "string", size: 256 },
+        { field: "missing", type: "string" },
+      ],
+    );
+  });
+
+  it("expands a union with no member list", () => {
+    const expanded = expandTypes(
+      [shaped("combo", [], { kind: "union" })],
+      "integer",
+    );
+    assert.deepEqual(expanded[0]?.fields, []);
+  });
+
+  it("expands a union of unknown members to local fields only", () => {
+    const expanded = expandTypes(
+      [
+        shaped("combo", [], {
+          kind: "union",
+          union: ["ghost"],
+          fields: [
+            {
+              name: "extra",
+              type: "string",
+              kind: "primitive",
+              base: "string",
+              isArray: false,
+              isNullable: false,
+            },
+          ],
+        }),
+      ],
+      "integer",
+    );
+    assert.deepEqual(
+      expanded[0]?.fields.map((f) => f.name),
+      ["extra"],
+    );
+  });
+
   it("maps an unknown inherited id type to number", () => {
     assert.equal(inheritedIdType("integer"), "integer");
     assert.equal(inheritedIdType("float"), "number");

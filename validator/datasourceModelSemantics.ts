@@ -1,8 +1,32 @@
+import { readFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { asRecord } from "./yamlPositions.ts";
-import type { SpecValidationResult } from "./types.ts";
+import type { SpecValidationResult, ValidateOptions } from "./types.ts";
 import type { ParsedYaml } from "./SpecValidator.ts";
 import { pushUnique, singleKey, specErr } from "./semanticsUtil.ts";
 import { indexTypeFields } from "./typeModelSemantics.ts";
+import { withIncludeFilePath } from "./includeSemantics.ts";
+
+async function readIfPresent(path: string): Promise<string | undefined> {
+  try {
+    return await readFile(path, "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+export async function withSiblingTypes(
+  path: string,
+  options?: ValidateOptions,
+): Promise<ValidateOptions> {
+  const withInclude = withIncludeFilePath(path, options);
+  const types =
+    withInclude.types ??
+    (withInclude.typesPath
+      ? await readFile(withInclude.typesPath, "utf8")
+      : await readIfPresent(join(dirname(path), "types.yaml")));
+  return { ...withInclude, types };
+}
 
 type TableInfo = {
   path: string;
@@ -89,8 +113,9 @@ function checkIndexes(
     const indexes = def?.indexes;
     if (!Array.isArray(indexes)) return;
     const tablePath = `/types/${ti}/${pair.key}`;
-    const local = tables.get(pair.key);
-    const known = new Set<string>(local?.fields.keys() ?? []);
+    const known = new Set<string>([
+      ...tables.get(pair.key)!.fields.keys(),
+    ]);
     const companion = companionFields?.get(pair.key);
     if (companion) {
       for (const name of companion.keys()) known.add(name);

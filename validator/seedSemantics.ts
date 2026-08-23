@@ -8,6 +8,7 @@ import type {
 } from "./types.ts";
 import type { ParsedYaml } from "./SpecValidator.ts";
 import { indexTypeFields } from "./typeModelSemantics.ts";
+import { matchTypesFilter } from "./includeFilter.ts";
 
 const AUTO_COLUMNS = new Set(["id", "created", "updated"]);
 
@@ -94,6 +95,54 @@ function tableNames(data: unknown): Set<string> {
   return out;
 }
 
+function typesFilter(data: unknown): string | undefined {
+  const includes = asRecord(data)?.includes;
+  if (!Array.isArray(includes)) return undefined;
+  for (const entry of includes) {
+    const filter = asRecord(asRecord(entry)?.types)?.filter;
+    if (typeof filter === "string") return filter;
+  }
+  return undefined;
+}
+
+function typeCandidates(
+  data: unknown,
+): Array<{ name: string; tags: string[]; inherits?: string }> {
+  const out: Array<{ name: string; tags: string[]; inherits?: string }> = [];
+  const types = asRecord(data)?.types;
+  if (!Array.isArray(types)) return out;
+  for (const entry of types) {
+    const obj = asRecord(entry);
+    if (!obj) continue;
+    const name = Object.keys(obj)[0];
+    if (!name) continue;
+    const def = asRecord(obj[name]) ?? {};
+    const tags = Array.isArray(def.tags)
+      ? def.tags.filter((t): t is string => typeof t === "string")
+      : [];
+    out.push({
+      name,
+      tags,
+      inherits: typeof def.inherits === "string" ? def.inherits : undefined,
+    });
+  }
+  return out;
+}
+
+function allowedTables(
+  typesData: unknown,
+  datasourceData?: unknown,
+): Set<string> | undefined {
+  if (datasourceData === undefined) return undefined;
+  const filter = typesFilter(datasourceData);
+  if (!filter) return tableNames(datasourceData);
+  return new Set(
+    typeCandidates(typesData)
+      .filter((c) => matchTypesFilter(filter, c))
+      .map((c) => c.name),
+  );
+}
+
 function isOmittable(def: FieldDef): boolean {
   return def.is_nullable === true || "default_value" in def;
 }
@@ -146,8 +195,7 @@ export function checkSeedSemantics(
   datasourceData?: unknown,
 ): SpecValidationResult {
   const tables = indexTypeFields(typesData);
-  const allowed =
-    datasourceData === undefined ? undefined : tableNames(datasourceData);
+  const allowed = allowedTables(typesData, datasourceData);
   const seeds = asRecord(parsed.data)?.seeds;
   if (!Array.isArray(seeds)) return { valid: true, errors: [] };
 

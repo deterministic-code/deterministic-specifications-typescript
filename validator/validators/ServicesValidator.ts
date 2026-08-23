@@ -1,5 +1,4 @@
 import { SpecValidator } from "../SpecValidator.ts";
-import { LIVE_VERSION } from "../specVersion.ts";
 import {
   checkIncludeCycles,
   withIncludeFilePath,
@@ -9,7 +8,7 @@ import { checkIncludeFilters } from "../includeFilter.ts";
 
 /**
  * Live engine for `services.yaml`: JSON Schema first, then unique service
- * names, then a walk of `file:` includes. Pinned to {@link LIVE_VERSION}.
+ * names, then a walk of `file:` includes.
  */
 export class ServicesValidator extends SpecValidator {
   constructor() {
@@ -17,7 +16,6 @@ export class ServicesValidator extends SpecValidator {
       {
         subdir: "backend",
         name: "services.spec.yaml",
-        version: LIVE_VERSION,
       },
       [checkServiceModel, checkIncludeFilters, checkIncludeCycles],
       withIncludeFilePath,

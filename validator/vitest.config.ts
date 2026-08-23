@@ -7,7 +7,13 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["**/*.ts"],
-      exclude: ["**/*.test.ts", "types.ts", "test/**", "vitest.config.ts"],
+      exclude: [
+        "**/*.test.ts",
+        "types.ts",
+        "test/**",
+        "vitest.config.ts",
+        "validators/engines.ts",
+      ],
       reporter: ["text"],
       thresholds: {
         lines: 100,

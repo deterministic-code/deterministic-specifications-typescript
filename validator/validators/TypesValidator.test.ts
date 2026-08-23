@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { TypesValidator } from "../VersionedValidator.ts";
+import { TypesValidator } from "./TypesValidator.ts";
 import { TypesValidator as Engine } from "./TypesValidator.ts";
 
 const MINIMAL = `version: 1.0.0

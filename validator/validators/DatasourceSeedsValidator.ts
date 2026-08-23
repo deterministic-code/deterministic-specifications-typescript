@@ -1,5 +1,4 @@
 import { SpecValidator, type ParsedYaml } from "../SpecValidator.ts";
-import { LIVE_VERSION } from "../specVersion.ts";
 import type { SpecValidationResult, ValidateOptions } from "../types.ts";
 import { parseYamlWithPositions } from "../yamlPositions.ts";
 import {
@@ -26,7 +25,6 @@ async function checkSeeds(
   const typesValidator = new SpecValidator({
     subdir: "backend",
     name: "types.spec.yaml",
-    version: LIVE_VERSION,
   });
   const typesResult = await typesValidator.validate(typesText);
   if (!typesResult.valid) {
@@ -40,7 +38,6 @@ async function checkSeeds(
     const datasourceValidator = new SpecValidator({
       subdir: "backend",
       name: "datasource.spec.yaml",
-      version: LIVE_VERSION,
     });
     const datasourceResult = await datasourceValidator.validate(datasourceText);
     if (!datasourceResult.valid) {
@@ -63,7 +60,6 @@ async function checkSeeds(
 /**
  * Live engine for `datasource_seeds.yaml`: JSON Schema first, then
  * semantic checks against companion `types.yaml` and `datasource.yaml`.
- * Pinned to {@link LIVE_VERSION}.
  */
 export class DatasourceSeedsValidator extends SpecValidator {
   constructor() {
@@ -71,7 +67,6 @@ export class DatasourceSeedsValidator extends SpecValidator {
       {
         subdir: "backend",
         name: "datasource-seeds.spec.yaml",
-        version: LIVE_VERSION,
       },
       checkSeeds,
       withSiblingCompanions,

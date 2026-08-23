@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { DatasourceSeedsValidator } from "../VersionedValidator.ts";
+import { DatasourceSeedsValidator } from "../index.ts";
 import { DatasourceSeedsValidator as Engine } from "./DatasourceSeedsValidator.ts";
 
 const TYPES = `version: 1.0.0
@@ -209,6 +209,25 @@ seeds:
     }
   });
 
+  test("rejects an invalid companion datasource.yaml document", async () => {
+    const result = await validator().validate(
+      `version: 1.0.0
+seeds:
+  - user:
+      - id1:
+          email: a@b.c
+`,
+      {
+        types: TYPES,
+        datasource: "version: 1.0.0\nnot_types: 1\n",
+      },
+    );
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]?.message).toMatch(
+      /companion datasource.yaml is invalid/,
+    );
+  });
+
   test("rejects an invalid companion types.yaml document", async () => {
     const result = await check(
       `version: 1.0.0
@@ -263,7 +282,6 @@ types:
       fields:
         - email:
             type: string
-            size: 256
             size: 256
         - count:
             type: integer

@@ -1,7 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { SpecValidator } from "./index.ts";
 import { resolveSpecPath } from "./resolveSpecPath.ts";
-import { LIVE_VERSION } from "./specVersion.ts";
 import {
   errorFromUnknown,
   formatAjvError,
@@ -101,11 +100,7 @@ describe("yamlErrorOffset / resolveAjvCtor / formatAjvError / errorFromUnknown",
 
 describe("SpecValidator constructed with an absolute spec path", () => {
   test("validates against that spec and reuses the compiled schema", async () => {
-    const specPath = await resolveSpecPath(
-      "backend",
-      "types.spec.yaml",
-      LIVE_VERSION,
-    );
+    const specPath = await resolveSpecPath("backend", "types.spec.yaml");
     const validator = new SpecValidator(specPath);
     const first = await validator.validate(VALID);
     const second = await validator.validate(VALID);
@@ -114,11 +109,7 @@ describe("SpecValidator constructed with an absolute spec path", () => {
   });
 
   test("accepts a path thunk", async () => {
-    const specPath = await resolveSpecPath(
-      "backend",
-      "types.spec.yaml",
-      LIVE_VERSION,
-    );
+    const specPath = await resolveSpecPath("backend", "types.spec.yaml");
     const validator = new SpecValidator(async () => specPath);
     expect(await validator.validate(VALID)).toEqual({
       valid: true,
@@ -127,37 +118,19 @@ describe("SpecValidator constructed with an absolute spec path", () => {
   });
 });
 
-describe("SpecValidator pinned to a version", () => {
-  test("pinnedEngines returns a constructor per catalogued engine", async () => {
-    const engines = SpecValidator.pinnedEngines(LIVE_VERSION);
-    expect(Object.keys(engines)).toEqual([
-      "TypesValidator",
-      "DatasourceValidator",
-      "DatasourceSeedsValidator",
-      "RoutesValidator",
-      "RoutesApiValidator",
-      "ServicesValidator",
-      "FrontendBindingsValidator",
-    ]);
-    const result = await new engines.TypesValidator().validate(VALID);
-    expect(result).toEqual({ valid: true, errors: [] });
-  });
-
-  test("rejects a document for a different version", async () => {
+describe("SpecValidator constructed with a spec ref", () => {
+  test("resolves the live types spec", async () => {
     const result = await new SpecValidator({
       subdir: "backend",
       name: "types.spec.yaml",
-      version: LIVE_VERSION,
-    }).validate(VALID.replace("1.0.0", "2.0.0"));
-    expect(result.valid).toBe(false);
-    expect(result.errors[0]?.message).toMatch(/pinned to 1\.0\.0/);
+    }).validate(VALID);
+    expect(result).toEqual({ valid: true, errors: [] });
   });
 
-  test("surfaces a missing spec file as a version-path error", async () => {
+  test("surfaces a missing spec file", async () => {
     const result = await new SpecValidator({
       subdir: "backend",
       name: "does-not-exist.spec.yaml",
-      version: "1.0.0",
     }).validate("version: 1.0.0\ntypes: []\n");
     expect(result.valid).toBe(false);
     expect(result.errors[0]?.message).toMatch(/spec file not found/);
