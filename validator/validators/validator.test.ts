@@ -79,7 +79,7 @@ describe("live engines", () => {
     );
   });
 
-  test("reports an inherit vs one_of mismatch", async () => {
+  test("rejects a leftover one_of on an inherit type", async () => {
     const result = await datasource.validate(
       yaml("types:\n  - user:\n      inherits: set\n      one_of: [a, b]\n"),
     );
@@ -186,7 +186,7 @@ describe("live engines", () => {
     }
   });
 
-  test("TypesValidator rejects a one_of vs shaped mismatch", async () => {
+  test("TypesValidator rejects a leftover one_of property", async () => {
     const result = await new TypesValidator().validate(
       yaml("types:\n  - foo:\n      one_of: [a]\n      fields: []\n"),
     );

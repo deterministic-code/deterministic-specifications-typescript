@@ -9,7 +9,7 @@ import { checkIncludeFilters } from "../includeFilter.ts";
 
 /**
  * Live engine for `types.yaml`: JSON Schema first, then default_value
- * tokens/ranges, then inherit/union/one_of/reference checks, then include
+ * tokens/ranges, then inherit/union/reference checks, then include
  * filters and `file:` cycles.
  */
 export class TypesValidator extends SpecValidator {
