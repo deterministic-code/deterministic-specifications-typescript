@@ -82,7 +82,6 @@ describe("parser coverage", () => {
             shaped("a", { kind: "inherit", inherits: "b" }),
             shaped("b", { kind: "inherit", inherits: "a" }),
           ],
-          "integer",
         ),
       /circular inherit/,
     );

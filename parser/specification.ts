@@ -181,21 +181,6 @@ export const parseFieldType = (
   return { kind: "type", base, isArray };
 };
 
-const PROJECT_ID_TYPES = new Set(["integer", "biginteger", "uuid", "string"]);
-
-export const resolvedProjectIdType = (raw: string): string =>
-  PROJECT_ID_TYPES.has(raw) ? raw : "integer";
-
-const ID_FIELD_TYPE: Record<string, string> = {
-  integer: "integer",
-  biginteger: "biginteger",
-  uuid: "uuid",
-  string: "string",
-};
-
-export const inheritedIdType = (idType: string): string =>
-  ID_FIELD_TYPE[idType] ?? "number";
-
 type IdentityType = Pick<Type, "inherits" | "fields" | "ids">;
 
 export const hasAuthoredIdentity = (type: IdentityType): boolean =>
@@ -255,9 +240,9 @@ const field = (
   };
 };
 
-const builtInFields = (name: string, idType: string): TypeField[] | undefined => {
+const builtInFields = (name: string): TypeField[] | undefined => {
   if (name === "set") {
-    return [field("id", inheritedIdType(idType))];
+    return [field("id", "integer")];
   }
   if (name === "dictionary") {
     return [field("name", "string"), field("value", "string")];
@@ -281,15 +266,14 @@ const dropFields = (fields: TypeField[], remove?: string[]): TypeField[] => {
   return fields.filter((f) => !drop.has(f.name));
 };
 
-export const expandTypes = (types: Type[], idType: string): Type[] => {
-  const projectIdType = resolvedProjectIdType(idType);
+export const expandTypes = (types: Type[]): Type[] => {
   const byName = new Map(types.map((t) => [t.name, t]));
   const cache = new Map<string, TypeField[]>();
 
   const resolve = (name: string, stack: Set<string>): TypeField[] => {
     const hit = cache.get(name);
     if (hit) return hit;
-    const builtin = builtInFields(name, projectIdType);
+    const builtin = builtInFields(name);
     if (builtin) {
       cache.set(name, builtin);
       return builtin;

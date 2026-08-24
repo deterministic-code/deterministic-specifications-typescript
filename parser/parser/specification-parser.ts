@@ -9,7 +9,6 @@ import {
   expandTypes,
   parseFieldType,
   primaryKeyColumn,
-  resolvedProjectIdType,
   ROUTES_YAML,
   SERVICES_YAML,
   TYPES_YAML,
@@ -166,9 +165,6 @@ class Parser {
     opts?: { serviceClassName?: (entity: string) => string },
   ): Promise<IDeterministic> {
     const reader = this.#reader;
-    const idType = resolvedProjectIdType(
-      settings["datasource.id_type"] ?? "integer",
-    );
     const serviceClassName = opts?.serviceClassName ?? ((entity) => entity);
     const [hasTypes, hasDs, hasSeeds, hasServices, hasRoutes] =
       await Promise.all([
@@ -191,7 +187,7 @@ class Parser {
 
     const types =
       typesYaml !== undefined ? this.#parseTypes(typesYaml) : [];
-    const expandedTypes = expandTypes(types, idType);
+    const expandedTypes = expandTypes(types);
     const datasource =
       datasourceYaml !== undefined
         ? this.#parseDatasource(datasourceYaml, expandedTypes)
