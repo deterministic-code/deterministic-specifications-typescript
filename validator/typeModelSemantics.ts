@@ -9,14 +9,13 @@ const BUILT_IN: Record<string, readonly string[]> = {
 };
 
 /** Primary label. `inherit` may also carry `union` — those members compose. */
-type TypeKind = "inherit" | "union" | "one_of" | "shaped";
+type TypeKind = "inherit" | "union" | "shaped";
 
 type TypeInfo = {
   path: string;
   kind: TypeKind;
   inherits?: string;
   union?: string[];
-  oneOf?: string[];
   mapping?: Record<string, string>;
   mappingPath?: string;
   removeFields?: string[];
@@ -32,7 +31,6 @@ const hasAuthoredIdentity = (info: TypeInfo): boolean =>
 function typeKind(def: Record<string, unknown>): TypeKind {
   if (typeof def.inherits === "string") return "inherit";
   if (Array.isArray(def.union)) return "union";
-  if (Array.isArray(def.one_of)) return "one_of";
   return "shaped";
 }
 
@@ -108,7 +106,6 @@ function collectTypes(
       kind: typeKind(def),
       inherits: typeof def.inherits === "string" ? def.inherits : undefined,
       union: stringList(def.union),
-      oneOf: stringList(def.one_of),
       mapping: mappingOf(def),
       mappingPath: def.mapping !== undefined ? `${path}/mapping` : undefined,
       removeFields: stringList(def.remove_fields),
@@ -179,26 +176,19 @@ function checkComposition(
         sources.push(info.inherits);
       }
     }
-    const checkMembers = (
-      members: string[] | undefined,
-      key: "union" | "one_of",
-    ) => {
-      members?.forEach((member, i) => {
-        if (BUILT_IN[member] || types.has(member)) {
-          sources.push(member);
-          return;
-        }
-        errors.push(
-          specErr(
-            parsed,
-            `${info.path}/${key}/${i}`,
-            `unknown type '${member}' in ${key} on ${name}`,
-          ),
-        );
-      });
-    };
-    checkMembers(info.union, "union");
-    checkMembers(info.oneOf, "one_of");
+    info.union?.forEach((member, i) => {
+      if (BUILT_IN[member] || types.has(member)) {
+        sources.push(member);
+        return;
+      }
+      errors.push(
+        specErr(
+          parsed,
+          `${info.path}/union/${i}`,
+          `unknown type '${member}' in union on ${name}`,
+        ),
+      );
+    });
 
     const available = new Set<string>();
     for (const src of sources) {
@@ -478,7 +468,6 @@ function typeInfoFromEntry(entry: unknown): { name: string; info: TypeInfo } | n
       kind: typeKind(def),
       inherits: typeof def.inherits === "string" ? def.inherits : undefined,
       union: stringList(def.union),
-      oneOf: stringList(def.one_of),
       mapping: mappingOf(def),
       removeFields: stringList(def.remove_fields),
       ids: stringList(def.ids),

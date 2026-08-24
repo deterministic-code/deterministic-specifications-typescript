@@ -120,7 +120,6 @@ const seedCells = (node: YamlNode): Record<string, SeedValue> => {
 const typeKind = (node: YamlNode): TypeKind => {
   if (node.str("inherits") !== undefined) return "inherit";
   if (Array.isArray(node.child("union").value)) return "union";
-  if (Array.isArray(node.child("one_of").value)) return "one_of";
   return "shaped";
 };
 
@@ -266,9 +265,6 @@ class Parser {
           : {}),
         ...(Array.isArray(node.child("union").value)
           ? { union: node.strings("union") }
-          : {}),
-        ...(Array.isArray(node.child("one_of").value)
-          ? { oneOf: node.strings("one_of") }
           : {}),
         ...(mapping ? { mapping } : {}),
         ...(removeFields.length > 0 ? { removeFields } : {}),

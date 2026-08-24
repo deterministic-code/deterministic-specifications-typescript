@@ -262,12 +262,10 @@ types:
     ).toBe(true);
   });
 
-  test("rejects unknown union and one_of members", () => {
+  test("rejects unknown union members", () => {
     const result = checkTypeModel(
       parsed(`version: 1.0.0
 types:
-  - result:
-      one_of: [person, empty]
   - mix:
       union: [person, empty]
       fields: []

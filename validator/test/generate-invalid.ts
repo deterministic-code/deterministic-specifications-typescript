@@ -464,10 +464,6 @@ function viewLoc(path: string): Mut | null {
     version: "1.0.0",
     types: [{ mix: { union: ["person", "other"], fields: [] } }],
   };
-  const oneOf: Host = {
-    version: "1.0.0",
-    types: [{ result: { one_of: ["person", "other"] } }],
-  };
   if (path === "#") return { host: VIEW_MIN, loc: [] };
   if (path === "#/properties/includes")
     return {
@@ -492,8 +488,6 @@ function viewLoc(path: string): Mut | null {
       return { host: unioned, loc: ["types", 0, "mix", "union"] };
     return { host: unioned, loc: ["types", 0, "mix"] };
   }
-  if (path.includes("oneOfType"))
-    return { host: oneOf, loc: ["types", 0, "result"] };
   if (path.includes("shapedType") || path.includes("typeDef"))
     return { host: shaped, loc: ["types", 0, "person"] };
   if (path.includes("fieldEntry/propertyNames") || path.includes("fieldEntry"))

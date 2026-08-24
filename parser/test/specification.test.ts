@@ -497,20 +497,4 @@ describe("specification helpers", () => {
     );
   });
 
-  it("leaves one_of types without merged fields", () => {
-    const expanded = expandTypes(
-      [
-        shaped("a", [], { tags: ["view_type"] }),
-        shaped("b", [], { tags: ["view_type"] }),
-        shaped("result", [], {
-          kind: "one_of",
-          oneOf: ["a", "b"],
-          tags: ["view_type"],
-        }),
-      ],
-    );
-    const result = expanded.find((t) => t.name === "result");
-    assert.equal(result?.kind, "one_of");
-    assert.deepEqual(result?.fields, []);
-  });
 });

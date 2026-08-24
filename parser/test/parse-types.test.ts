@@ -18,7 +18,7 @@ const parse = (files: Record<string, string>) =>
   DeterministicParser(memoryReader(files)).parse({});
 
 describe("parse types.yaml", () => {
-  it("reads inherit, union, one_of, mapping, and remove_fields", async () => {
+  it("reads inherit, union, mapping, and remove_fields", async () => {
     const det = await parse({
       "types.yaml": `types:
   - user:
@@ -54,9 +54,6 @@ describe("parse types.yaml", () => {
       fields:
         - phone:
             type: string
-  - result:
-      tags: [view_type]
-      one_of: [person, phone_contact]
 `,
     });
     const user = det.expandedTypes.find((t) => t.name === "user");
@@ -73,9 +70,6 @@ describe("parse types.yaml", () => {
     const phone = det.expandedTypes.find((t) => t.name === "phone_contact");
     assert.ok(phone?.fields.some((f) => f.name === "role_name"));
     assert.ok(!phone?.fields.some((f) => f.name === "id"));
-    const result = det.types.find((t) => t.name === "result");
-    assert.equal(result?.kind, "one_of");
-    assert.deepEqual(result?.oneOf, ["person", "phone_contact"]);
   });
 
   it("keeps union members when inherits is also present", async () => {

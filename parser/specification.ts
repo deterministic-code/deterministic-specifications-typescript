@@ -29,7 +29,7 @@ export type TypeField = {
 };
 
 /** Primary label. `inherit` may also carry `union` — those members compose. */
-export type TypeKind = "inherit" | "union" | "one_of" | "shaped";
+export type TypeKind = "inherit" | "union" | "shaped";
 
 export type Type = {
   name: string;
@@ -37,7 +37,6 @@ export type Type = {
   kind: TypeKind;
   inherits?: string;
   union?: string[];
-  oneOf?: string[];
   mapping?: Record<string, string>;
   removeFields?: string[];
   ids?: string[];
@@ -362,8 +361,7 @@ export const expandTypes = (types: Type[]): Type[] => {
     return {
       ...type,
       ...(ids !== undefined && ids.length > 0 ? { ids } : {}),
-      fields:
-        type.kind === "one_of" ? type.fields : resolve(type.name, new Set()),
+      fields: resolve(type.name, new Set()),
     };
   });
 };
