@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "vitest";
 import { memoryReader } from "../deterministic-reader.ts";
-import { DeterministicParser } from "../parser/specification-parser.ts";
+import {
+  DeterministicParser,
+  inheritsChain,
+} from "../parser/specification-parser.ts";
+import type { Type } from "../specification.ts";
 
 const parse = (files: Record<string, string>) =>
   DeterministicParser(memoryReader(files)).parse({});
@@ -99,5 +103,182 @@ routes: []
     });
     assert.equal(spec.routes.nested[0]?.kind, "direct-fk");
     assert.ok(spec.routes.childrenOnly.has("person"));
+  });
+
+  it("matches a direct FK when the parent view inherits the referenced type", async () => {
+    const spec = await parse({
+      "types.yaml": `types:
+  - contacts_base:
+      tags: [datasource_type]
+      inherits: set
+      fields: []
+  - addresses_base:
+      tags: [datasource_type]
+      inherits: set
+      fields:
+        - contact_id:
+            type: integer
+            references: contacts_base.id
+  - contact:
+      tags: [view_type]
+      inherits: contacts_base
+      fields: []
+  - address:
+      tags: [view_type]
+      inherits: addresses_base
+      fields: []
+`,
+      "routes.yaml": `combined_routes:
+  - contact:
+      route: /api/contacts
+      combines:
+        - address
+routes: []
+`,
+    });
+    assert.equal(spec.routes.nested[0]?.kind, "direct-fk");
+    assert.equal(
+      spec.routes.nested[0] && spec.routes.nested[0].kind === "direct-fk"
+        ? spec.routes.nested[0].fkColumn
+        : undefined,
+      "contact_id",
+    );
+    assert.ok(spec.routes.childrenOnly.has("address"));
+  });
+
+  it("still finds the ancestor FK when the child view removes it", async () => {
+    const spec = await parse({
+      "types.yaml": `types:
+  - contacts_base:
+      tags: [datasource_type]
+      inherits: set
+      fields: []
+  - addresses_base:
+      tags: [datasource_type]
+      inherits: set
+      fields:
+        - contact_id:
+            type: integer
+            references: contacts_base.id
+        - line1:
+            type: string
+  - contact:
+      tags: [view_type]
+      inherits: contacts_base
+      fields: []
+  - address:
+      tags: [view_type]
+      inherits: addresses_base
+      remove_fields: [contact_id]
+      fields: []
+`,
+      "routes.yaml": `combined_routes:
+  - contact:
+      combines:
+        - address
+routes: []
+`,
+    });
+    assert.equal(spec.routes.nested[0]?.kind, "direct-fk");
+    assert.equal(
+      spec.routes.nested[0] && spec.routes.nested[0].kind === "direct-fk"
+        ? spec.routes.nested[0].fkColumn
+        : undefined,
+      "contact_id",
+    );
+  });
+
+  it("detects M2M when junction FKs point at bases and combined names are views", async () => {
+    const spec = await parse({
+      "types.yaml": `types:
+  - contacts_base:
+      tags: [datasource_type]
+      inherits: set
+      fields: []
+  - contact_groups_base:
+      tags: [datasource_type]
+      inherits: set
+      fields: []
+  - contact:
+      tags: [view_type]
+      inherits: contacts_base
+      fields: []
+  - contact_group:
+      tags: [view_type]
+      inherits: contact_groups_base
+      fields: []
+  - contact_group_member:
+      tags: [datasource_type, many_to_many]
+      fields:
+        - contact_id:
+            type: integer
+            references: contacts_base.id
+        - contact_group_id:
+            type: integer
+            references: contact_groups_base.id
+`,
+      "routes.yaml": `combined_routes:
+  - contact:
+      combines:
+        - contact_group
+routes: []
+`,
+    });
+    assert.equal(spec.routes.nested[0]?.kind, "m2m");
+    assert.equal(
+      spec.routes.nested[0] && spec.routes.nested[0].kind === "m2m"
+        ? spec.routes.nested[0].junction
+        : undefined,
+      "contact_group_member",
+    );
+  });
+
+  it("covers inherit chain stops for missing and dictionary", async () => {
+    const spec = await parse({
+      "types.yaml": `types:
+  - parent:
+      tags: [view_type]
+      inherits: set
+      fields: []
+  - via_dict:
+      tags: [view_type]
+      inherits: dictionary
+      fields:
+        - parent_id:
+            type: integer
+            references: parent.id
+  - via_missing:
+      tags: [view_type]
+      inherits: ghost_base
+      fields:
+        - parent_id:
+            type: integer
+            references: parent.id
+`,
+      "routes.yaml": `combined_routes:
+  - parent:
+      combines:
+        - via_dict
+        - via_missing
+routes: []
+`,
+    });
+    assert.equal(spec.routes.nested.length, 2);
+    assert.ok(spec.routes.nested.every((n) => n.kind === "direct-fk"));
+  });
+
+  it("stops inheritsChain on a cycle", () => {
+    const type = (name: string, inherits: string): Type => ({
+      name,
+      tags: ["view_type"],
+      kind: "inherit",
+      inherits,
+      fields: [],
+    });
+    const typeByName = new Map<string, Type>([
+      ["cyc_a", type("cyc_a", "cyc_b")],
+      ["cyc_b", type("cyc_b", "cyc_a")],
+    ]);
+    assert.deepEqual(inheritsChain("cyc_a", typeByName), ["cyc_b"]);
   });
 });

@@ -53,6 +53,7 @@ describe("type model semantics", () => {
 types:
   - a:
       union: [b]
+      remove_fields: [b.id]
       fields:
         - ref:
             references: set.missing
@@ -185,14 +186,93 @@ types:
     );
   });
 
-  test("rejects unknown union and one_of members", async () => {
-    const result = await validator().validate(doc(`types:
+  test("accepts qualified remove_fields on a contact inherit+union", () => {
+    const result = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - contacts_base:
+      inherits: set
+      fields:
+        - email:
+            type: string
+  - contact_source:
+      inherits: set
+      fields:
+        - name:
+            type: string
+  - contact:
+      inherits: contacts_base
+      union: [contact_source]
+      mapping:
+        name: contact_source_name
+      remove_fields: [contact_source.id]
+      fields: []
+`),
+    );
+    expect(result).toEqual({ valid: true, errors: [] });
+  });
+
+  test("rejects qualified remove_fields that miss the inherit+union source", () => {
+    const result = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - contacts_base:
+      inherits: set
+      fields:
+        - email:
+            type: string
+  - contact_source:
+      fields:
+        - name:
+            type: string
+  - other:
+      fields:
+        - id:
+            type: integer
+  - contact:
+      inherits: contacts_base
+      union: [contact_source]
+      remove_fields: [ghost.id, contacts_base.missing, missing, other.id]
+      fields: []
+`),
+    );
+    expect(result.valid).toBe(false);
+    const messages = result.errors.map((e) => e.message);
+    expect(messages.some((m) => /unknown type 'ghost' in remove_fields/.test(m))).toBe(
+      true,
+    );
+    expect(
+      messages.some((m) =>
+        /remove_fields 'contacts_base.missing' is not a field on contacts_base/.test(
+          m,
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      messages.some((m) =>
+        /remove_fields 'missing' is not a field on the inherited or unioned shape/.test(
+          m,
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      messages.some((m) =>
+        /remove_fields 'other.id' is not from an inherit or union source/.test(m),
+      ),
+    ).toBe(true);
+  });
+
+  test("rejects unknown union and one_of members", () => {
+    const result = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
   - result:
       one_of: [person, empty]
   - mix:
       union: [person, empty]
       fields: []
-`));
+`),
+    );
     expect(result.valid).toBe(false);
     expect(result.errors.some((e) => /unknown type 'person'/.test(e.message))).toBe(
       true,

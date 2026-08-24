@@ -260,10 +260,42 @@ const renameFields = (
   );
 };
 
-const dropFields = (fields: TypeField[], remove?: string[]): TypeField[] => {
-  if (!remove?.length) return fields;
-  const drop = new Set(remove);
-  return fields.filter((f) => !drop.has(f.name));
+type SourcedField = TypeField & { source?: string };
+
+const withSource = (fields: TypeField[], source: string): SourcedField[] =>
+  fields.map((f) => ({ ...f, source }));
+
+const publicField = (field: SourcedField): TypeField => {
+  const { source: _source, ...rest } = field;
+  return rest;
+};
+
+/** Bare `id` drops every field named `id`. Qualified `contact_source.id` drops `id` only from that source. */
+const shouldDrop = (field: SourcedField, remove: string[]): boolean => {
+  for (const item of remove) {
+    const dot = item.indexOf(".");
+    if (dot === -1) {
+      if (field.name === item) return true;
+      continue;
+    }
+    if (
+      field.name === item.slice(dot + 1) &&
+      field.source === item.slice(0, dot)
+    ) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const dropFields = (
+  fields: SourcedField[],
+  remove?: string[],
+): TypeField[] => {
+  const kept = !remove?.length
+    ? fields
+    : fields.filter((f) => !shouldDrop(f, remove));
+  return kept.map(publicField);
 };
 
 export const expandTypes = (types: Type[]): Type[] => {
@@ -284,15 +316,18 @@ export const expandTypes = (types: Type[]): Type[] => {
     const type = byName.get(name);
     if (!type) return [];
     stack.add(name);
-    let inherited: TypeField[] = [];
+    let inherited: SourcedField[] = [];
     if (type.inherits) {
       inherited =
         type.inherits === "set" && hasAuthoredIdentity(type)
           ? []
-          : resolve(type.inherits, stack);
+          : withSource(resolve(type.inherits, stack), type.inherits);
     }
     for (const member of type.union ?? []) {
-      inherited = [...inherited, ...resolve(member, stack)];
+      inherited = [
+        ...inherited,
+        ...withSource(resolve(member, stack), member),
+      ];
     }
     stack.delete(name);
     const merged = [

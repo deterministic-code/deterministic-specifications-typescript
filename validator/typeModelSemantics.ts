@@ -53,6 +53,13 @@ function stringList(value: unknown): string[] | undefined {
   return value.filter((v): v is string => typeof v === "string");
 }
 
+/** Bare `id` or qualified `contact_source.id`. */
+function splitRemoveField(entry: string): { source?: string; name: string } {
+  const dot = entry.indexOf(".");
+  if (dot === -1) return { name: entry };
+  return { source: entry.slice(0, dot), name: entry.slice(dot + 1) };
+}
+
 function collectTypes(
   parsed: ParsedYaml,
 ): { types: Map<string, TypeInfo>; errors: SpecValidationResult["errors"] } {
@@ -145,7 +152,9 @@ function inheritedNames(
       if (names.delete(from)) names.add(to);
     }
   }
-  for (const drop of info.removeFields ?? []) names.delete(drop);
+  for (const drop of info.removeFields ?? []) {
+    names.delete(splitRemoveField(drop).name);
+  }
   for (const local of info.fields.keys()) names.add(local);
   return names;
 }
@@ -220,13 +229,52 @@ function checkComposition(
         );
       });
     }
+    const composeSources = new Set<string>();
+    if (info.inherits) composeSources.add(info.inherits);
+    for (const member of info.union ?? []) composeSources.add(member);
+
     info.removeFields?.forEach((field, i) => {
-      if (available.has(field)) return;
+      const path = `${info.removeFieldsPath}/${i}`;
+      const ref = splitRemoveField(field);
+      if (ref.source === undefined) {
+        if (available.has(ref.name)) return;
+        errors.push(
+          specErr(
+            parsed,
+            path,
+            `remove_fields '${field}' is not a field on the inherited or unioned shape of ${name}`,
+          ),
+        );
+        return;
+      }
+      if (!BUILT_IN[ref.source] && !types.has(ref.source)) {
+        errors.push(
+          specErr(
+            parsed,
+            path,
+            `unknown type '${ref.source}' in remove_fields on ${name}`,
+          ),
+        );
+        return;
+      }
+      if (!composeSources.has(ref.source)) {
+        errors.push(
+          specErr(
+            parsed,
+            path,
+            `remove_fields '${field}' is not from an inherit or union source of ${name}`,
+          ),
+        );
+        return;
+      }
+      const part = inheritedNames(ref.source, types, new Set([name]));
+      if ("cycle" in part) return;
+      if (part.has(ref.name)) return;
       errors.push(
         specErr(
           parsed,
-          `${info.removeFieldsPath}/${i}`,
-          `remove_fields '${field}' is not a field on the inherited or unioned shape of ${name}`,
+          path,
+          `remove_fields '${field}' is not a field on ${ref.source}`,
         ),
       );
     });
