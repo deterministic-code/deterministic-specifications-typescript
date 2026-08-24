@@ -78,6 +78,24 @@ const specPlural = (name: string): string => {
   return parts.join("_");
 };
 
+/** Walk `inherits`, skip set/dictionary, stop on missing or cycle. */
+export const inheritsChain = (
+  name: string,
+  typeByName: Map<string, Type>,
+): string[] => {
+  const chain: string[] = [];
+  const seen = new Set<string>([name]);
+  let current = typeByName.get(name)?.inherits;
+  while (current !== undefined) {
+    if (current === "set" || current === "dictionary") break;
+    if (seen.has(current)) break;
+    seen.add(current);
+    chain.push(current);
+    current = typeByName.get(current)?.inherits;
+  }
+  return chain;
+};
+
 const parseSeedKey = (rowKey: string): number => {
   const m = /^id(\d+)$/.exec(rowKey);
   if (!m) {
@@ -674,9 +692,42 @@ class Parser {
     return references.split(".")[0]!;
   }
 
-  #findForeignKeyTo(child: Type, parentName: string): string | null {
-    for (const field of child.fields) {
-      if (this.#refParent(field.references) === parentName) return field.name;
+  #inheritsChain(name: string, typeByName: Map<string, Type>): string[] {
+    return inheritsChain(name, typeByName);
+  }
+
+  #refMatchesParent(
+    target: string,
+    parent: string,
+    typeByName: Map<string, Type>,
+  ): boolean {
+    return (
+      parent === target ||
+      this.#inheritsChain(parent, typeByName).includes(target)
+    );
+  }
+
+  #fkFields(type: Type, typeByName: Map<string, Type>): TypeField[] {
+    const fields = [...type.fields];
+    for (const ancestor of this.#inheritsChain(type.name, typeByName)) {
+      fields.push(...(typeByName.get(ancestor)?.fields ?? []));
+    }
+    return fields;
+  }
+
+  #findForeignKeyTo(
+    child: Type,
+    parentName: string,
+    typeByName: Map<string, Type>,
+  ): string | null {
+    for (const field of this.#fkFields(child, typeByName)) {
+      const target = this.#refParent(field.references);
+      if (
+        target !== null &&
+        this.#refMatchesParent(target, parentName, typeByName)
+      ) {
+        return field.name;
+      }
     }
     return null;
   }
@@ -704,7 +755,7 @@ class Parser {
         const childType = typeByName.get(childName);
         if (
           childType !== undefined &&
-          this.#findForeignKeyTo(childType, parentName) !== null
+          this.#findForeignKeyTo(childType, parentName, typeByName) !== null
         ) {
           childrenOnly.add(childName);
         }
@@ -834,8 +885,8 @@ class Parser {
     for (const [name, def] of typeByName) {
       if (name === parentName || name === childName) continue;
       if (!def.tags.includes("many_to_many")) continue;
-      const parentFk = this.#findForeignKeyTo(def, parentName);
-      const childFk = this.#findForeignKeyTo(def, childName);
+      const parentFk = this.#findForeignKeyTo(def, parentName, typeByName);
+      const childFk = this.#findForeignKeyTo(def, childName, typeByName);
       if (parentFk !== null && childFk !== null) {
         matches.push({ name, parentFk, childFk });
       }
@@ -922,8 +973,16 @@ class Parser {
               `combined_routes: junction "${junctionName}" not found in types.yaml`,
             );
           }
-          const parentFkField = this.#findForeignKeyTo(junctionDef, parentName);
-          const childFkField = this.#findForeignKeyTo(junctionDef, targetName);
+          const parentFkField = this.#findForeignKeyTo(
+            junctionDef,
+            parentName,
+            typeByName,
+          );
+          const childFkField = this.#findForeignKeyTo(
+            junctionDef,
+            targetName,
+            typeByName,
+          );
           if (parentFkField === null || childFkField === null) {
             throw new Error(
               `combined_routes: junction "${junctionName}" missing FK to ${parentName}/${targetName}`,
@@ -946,7 +1005,11 @@ class Parser {
             `combined_routes: child "${child.name}" not found in types.yaml`,
           );
         }
-        const fkColumn = this.#findForeignKeyTo(childDef, parentName);
+        const fkColumn = this.#findForeignKeyTo(
+          childDef,
+          parentName,
+          typeByName,
+        );
         if (fkColumn !== null) {
           nested.push(
             this.#directFkDescriptor(parentName, parentBasePath, {

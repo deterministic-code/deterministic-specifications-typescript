@@ -450,6 +450,53 @@ describe("specification helpers", () => {
     ]);
   });
 
+  it("drops qualified remove_fields only from that inherit/union source", () => {
+    const field = (
+      name: string,
+      extras: Partial<Type["fields"][number]> = {},
+    ): Type["fields"][number] => ({
+      name,
+      type: "string",
+      kind: "primitive",
+      base: "string",
+      isArray: false,
+      isNullable: false,
+      ...extras,
+    });
+    const expanded = expandTypes([
+      shaped(
+        "contacts_base",
+        [
+          field("id", { type: "integer", base: "integer", isId: true }),
+          field("uuid", { type: "uuid", base: "uuid" }),
+          field("email"),
+        ],
+        { kind: "inherit", inherits: "set" },
+      ),
+      shaped(
+        "contact_source",
+        [
+          field("id", { type: "integer", base: "integer", isId: true }),
+          field("uuid", { type: "uuid", base: "uuid" }),
+          field("name"),
+        ],
+        { kind: "inherit", inherits: "set" },
+      ),
+      shaped("contact", [], {
+        kind: "inherit",
+        inherits: "contacts_base",
+        union: ["contact_source"],
+        mapping: { name: "contact_source_name" },
+        removeFields: ["contact_source.id", "contact_source.uuid"],
+        tags: ["view_type"],
+      }),
+    ]);
+    assert.deepEqual(
+      expanded.find((t) => t.name === "contact")?.fields.map((f) => f.name),
+      ["id", "uuid", "email", "contact_source_name"],
+    );
+  });
+
   it("leaves one_of types without merged fields", () => {
     const expanded = expandTypes(
       [

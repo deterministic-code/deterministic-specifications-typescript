@@ -114,11 +114,11 @@ types:
       mapping:
         name: contact_source_name
       remove_fields:
-        - id
-        - uuid
-        - created
-        - updated
-        - version
+        - contact_source.id
+        - contact_source.uuid
+        - contact_source.created
+        - contact_source.updated
+        - contact_source.version
       fields:
         - addresses:
             type: address[]
