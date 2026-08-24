@@ -446,7 +446,25 @@ function viewLoc(path: string): Mut | null {
     version: "1.0.0",
     types: [{ person: { fields: [{ name: { type: "string" } }] } }],
   };
-  const union: Host = {
+  const inherit: Host = {
+    version: "1.0.0",
+    types: [
+      {
+        person: {
+          inherits: "set",
+          union: ["source"],
+          mapping: { id: "person_id" },
+          remove_fields: ["bio"],
+          fields: [],
+        },
+      },
+    ],
+  };
+  const unioned: Host = {
+    version: "1.0.0",
+    types: [{ mix: { union: ["person", "other"], fields: [] } }],
+  };
+  const oneOf: Host = {
     version: "1.0.0",
     types: [{ result: { one_of: ["person", "other"] } }],
   };
@@ -457,38 +475,26 @@ function viewLoc(path: string): Mut | null {
       loc: ["includes"],
     };
   if (path === "#/properties/types") return { host: shaped, loc: ["types"] };
-  if (path.includes("viewEntry")) return { host: shaped, loc: ["types", 0] };
-  if (path.includes("unionView"))
-    return { host: union, loc: ["types", 0, "result"] };
-  if (path.includes("shapedView/properties/omit"))
-    return {
-      host: {
-        version: "1.0.0",
-        types: [
-          {
-            person: {
-              inherits: "datasource_types.user",
-              omit: ["bio"],
-              fields: [],
-            },
-          },
-        ],
-      },
-      loc: ["types", 0, "person", "omit"],
-    };
-  if (path.includes("shapedView/properties/inherits"))
-    return {
-      host: {
-        version: "1.0.0",
-        types: [
-          { person: { inherits: "datasource_types.user", fields: [] } },
-        ],
-      },
-      loc: ["types", 0, "person", "inherits"],
-    };
-  if (path.includes("shapedView"))
-    return { host: shaped, loc: ["types", 0, "person"] };
-  if (path.includes("viewDef"))
+  if (path.includes("typeEntry")) return { host: shaped, loc: ["types", 0] };
+  if (path.includes("inheritType")) {
+    if (path.includes("properties/union"))
+      return { host: inherit, loc: ["types", 0, "person", "union"] };
+    if (path.includes("properties/inherits"))
+      return { host: inherit, loc: ["types", 0, "person", "inherits"] };
+    if (path.includes("properties/mapping"))
+      return { host: inherit, loc: ["types", 0, "person", "mapping"] };
+    if (path.includes("properties/remove_fields"))
+      return { host: inherit, loc: ["types", 0, "person", "remove_fields"] };
+    return { host: inherit, loc: ["types", 0, "person"] };
+  }
+  if (path.includes("unionType")) {
+    if (path.includes("properties/union"))
+      return { host: unioned, loc: ["types", 0, "mix", "union"] };
+    return { host: unioned, loc: ["types", 0, "mix"] };
+  }
+  if (path.includes("oneOfType"))
+    return { host: oneOf, loc: ["types", 0, "result"] };
+  if (path.includes("shapedType") || path.includes("typeDef"))
     return { host: shaped, loc: ["types", 0, "person"] };
   if (path.includes("fieldEntry/propertyNames") || path.includes("fieldEntry"))
     return { host: shaped, loc: ["types", 0, "person", "fields", 0] };

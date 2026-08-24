@@ -1,8 +1,16 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import { TypesValidator } from "./index.ts";
-import { checkTypeModel } from "./typeModelSemantics.ts";
+import { checkTypeModel, indexTypeFields } from "./typeModelSemantics.ts";
 import { parseYamlWithPositions } from "./yamlPositions.ts";
 import type { ParsedYaml } from "./SpecValidator.ts";
+
+const CONTACTS_TYPES = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), "test/fixtures/contacts.types.yaml"),
+  "utf8",
+);
 
 function parsed(text: string): ParsedYaml {
   const { doc, lineCounter } = parseYamlWithPositions(text);
@@ -125,6 +133,54 @@ types:
       true,
     );
     expect(result.errors.some((e) => /remove_fields 'ghost'/.test(e.message))).toBe(
+      true,
+    );
+  });
+
+  test("accepts the contacts inherit+union view", () => {
+    const doc = parsed(CONTACTS_TYPES);
+    expect(checkTypeModel(doc)).toEqual({ valid: true, errors: [] });
+    const fields = indexTypeFields(doc.data).get("contact");
+    expect([...fields?.keys() ?? []]).toEqual([
+      "contact_source_id",
+      "first_name",
+      "last_name",
+      "email",
+      "notes",
+      "description",
+      "contact_source_name",
+      "addresses",
+      "phones",
+    ]);
+  });
+
+  test("rejects mapping and remove_fields that miss the composed inherit+union shape", () => {
+    const result = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - contacts_base:
+      inherits: set
+      fields:
+        - email:
+            type: string
+  - contact_source:
+      fields:
+        - name:
+            type: string
+  - contact:
+      inherits: contacts_base
+      union: [contact_source]
+      mapping:
+        ghost: other
+      remove_fields: [missing]
+      fields: []
+`),
+    );
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => /mapping 'ghost'/.test(e.message))).toBe(
+      true,
+    );
+    expect(result.errors.some((e) => /remove_fields 'missing'/.test(e.message))).toBe(
       true,
     );
   });

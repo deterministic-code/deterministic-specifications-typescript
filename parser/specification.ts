@@ -28,6 +28,7 @@ export type TypeField = {
   defaultValue?: string | number | boolean | null;
 };
 
+/** Primary label. `inherit` may also carry `union` — those members compose. */
 export type TypeKind = "inherit" | "union" | "one_of" | "shaped";
 
 export type Type = {
@@ -300,15 +301,14 @@ export const expandTypes = (types: Type[], idType: string): Type[] => {
     if (!type) return [];
     stack.add(name);
     let inherited: TypeField[] = [];
-    if (type.kind === "inherit" && type.inherits) {
+    if (type.inherits) {
       inherited =
         type.inherits === "set" && hasAuthoredIdentity(type)
           ? []
           : resolve(type.inherits, stack);
-    } else if (type.kind === "union") {
-      for (const member of type.union ?? []) {
-        inherited = [...inherited, ...resolve(member, stack)];
-      }
+    }
+    for (const member of type.union ?? []) {
+      inherited = [...inherited, ...resolve(member, stack)];
     }
     stack.delete(name);
     const merged = [
@@ -326,7 +326,6 @@ export const expandTypes = (types: Type[], idType: string): Type[] => {
     if (type.ids !== undefined && type.ids.length > 0) return type.ids;
     if (type.fields.some((f) => f.isId === true)) return undefined;
     if (
-      type.kind === "inherit" &&
       type.inherits &&
       type.inherits !== "set" &&
       type.inherits !== "dictionary"
