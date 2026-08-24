@@ -2,10 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "vitest";
 import {
   expandTypes,
-  inheritedIdType,
   parseFieldType,
   primaryKeyColumn,
-  resolvedProjectIdType,
   uniqueLookupFields,
   type Type,
 } from "../specification.ts";
@@ -39,11 +37,6 @@ describe("specification helpers", () => {
       base: "user_summary",
       isArray: false,
     });
-  });
-
-  it("falls back to integer for an unknown project id type", () => {
-    assert.equal(resolvedProjectIdType("integer"), "integer");
-    assert.equal(resolvedProjectIdType("float"), "integer");
   });
 
   it("defaults primaryKeyColumn to id", () => {
@@ -230,7 +223,6 @@ describe("specification helpers", () => {
   it("expands a union with no member list", () => {
     const expanded = expandTypes(
       [shaped("combo", [], { kind: "union" })],
-      "integer",
     );
     assert.deepEqual(expanded[0]?.fields, []);
   });
@@ -253,17 +245,11 @@ describe("specification helpers", () => {
           ],
         }),
       ],
-      "integer",
     );
     assert.deepEqual(
       expanded[0]?.fields.map((f) => f.name),
       ["extra"],
     );
-  });
-
-  it("maps an unknown inherited id type to number", () => {
-    assert.equal(inheritedIdType("integer"), "integer");
-    assert.equal(inheritedIdType("float"), "number");
   });
 
   it("expands set/dictionary inherit, mapping, and remove_fields", () => {
@@ -311,7 +297,6 @@ describe("specification helpers", () => {
           },
         ),
       ],
-      "integer",
     );
     assert.deepEqual(
       expanded[0]?.fields.map((f) => f.name),
@@ -372,7 +357,6 @@ describe("specification helpers", () => {
           { kind: "inherit", inherits: "set", ids: ["left_id", "right_id"] },
         ),
       ],
-      "integer",
     );
     assert.deepEqual(
       expanded[0]?.fields.map((f) => f.name),
@@ -411,7 +395,6 @@ describe("specification helpers", () => {
         ),
         shaped("orphan", [], { kind: "inherit", inherits: "ghost" }),
       ],
-      "integer",
     );
     assert.equal(expanded.find((t) => t.name === "alias")?.ids, undefined);
     assert.equal(expanded.find((t) => t.name === "orphan")?.ids, undefined);
@@ -457,7 +440,6 @@ describe("specification helpers", () => {
           { kind: "inherit", inherits: "link" },
         ),
       ],
-      "integer",
     );
     const tagged = expanded.find((t) => t.name === "tagged_link");
     assert.deepEqual(tagged?.ids, ["left_id", "right_id"]);
@@ -479,7 +461,6 @@ describe("specification helpers", () => {
           tags: ["view_type"],
         }),
       ],
-      "integer",
     );
     const result = expanded.find((t) => t.name === "result");
     assert.equal(result?.kind, "one_of");

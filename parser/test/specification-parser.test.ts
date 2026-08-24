@@ -47,7 +47,7 @@ services: []
 routes: []
 `,
       }),
-    ).parse({ "datasource.id_type": "integer" }, { serviceClassName });
+    ).parse({}, { serviceClassName });
     const user = spec.expandedTypes.find((t) => t.name === "user");
     assert.equal(user?.fields.find((f) => f.name === "role_id")?.type, "integer");
     assert.ok(spec.types.some((t) => t.name === "user"));
