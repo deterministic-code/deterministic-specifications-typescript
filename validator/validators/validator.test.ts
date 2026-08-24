@@ -79,9 +79,9 @@ describe("live engines", () => {
     );
   });
 
-  test("reports an inherit vs union mismatch", async () => {
+  test("reports an inherit vs one_of mismatch", async () => {
     const result = await datasource.validate(
-      yaml("types:\n  - user:\n      inherits: set\n      union: [a, b]\n"),
+      yaml("types:\n  - user:\n      inherits: set\n      one_of: [a, b]\n"),
     );
     expect(result.valid).toBe(false);
     expect(result.errors.length).toBeGreaterThan(0);
@@ -186,7 +186,7 @@ describe("live engines", () => {
     }
   });
 
-  test("TypesValidator rejects a union vs shaped mismatch", async () => {
+  test("TypesValidator rejects a one_of vs shaped mismatch", async () => {
     const result = await new TypesValidator().validate(
       yaml("types:\n  - foo:\n      one_of: [a]\n      fields: []\n"),
     );

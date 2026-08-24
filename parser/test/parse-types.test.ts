@@ -1,7 +1,18 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { describe, it } from "vitest";
 import { DeterministicParser } from "../parser/specification-parser.ts";
 import { memoryReader } from "../deterministic-reader.ts";
+
+const CONTACTS_TYPES = readFileSync(
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../validator/test/fixtures/contacts.types.yaml",
+  ),
+  "utf8",
+);
 
 const parse = (files: Record<string, string>) =>
   DeterministicParser(memoryReader(files)).parse({});
@@ -65,6 +76,51 @@ describe("parse types.yaml", () => {
     const result = det.types.find((t) => t.name === "result");
     assert.equal(result?.kind, "one_of");
     assert.deepEqual(result?.oneOf, ["person", "phone_contact"]);
+  });
+
+  it("keeps union members when inherits is also present", async () => {
+    const det = await parse({ "types.yaml": CONTACTS_TYPES });
+    const contact = det.types.find((t) => t.name === "contact");
+    assert.equal(contact?.kind, "inherit");
+    assert.equal(contact?.inherits, "contacts_base");
+    assert.deepEqual(contact?.union, ["contact_source"]);
+    assert.deepEqual(contact?.mapping, { name: "contact_source_name" });
+    assert.deepEqual(contact?.removeFields, [
+      "id",
+      "uuid",
+      "created",
+      "updated",
+      "version",
+    ]);
+    const expanded = det.expandedTypes.find((t) => t.name === "contact");
+    assert.deepEqual(expanded?.fields.map((f) => f.name), [
+      "contact_source_id",
+      "first_name",
+      "last_name",
+      "email",
+      "notes",
+      "contact_source_name",
+      "description",
+      "addresses",
+      "phones",
+    ]);
+    const address = det.expandedTypes.find((t) => t.name === "address");
+    assert.deepEqual(address?.fields.map((f) => f.name), [
+      "id",
+      "uuid",
+      "created",
+      "updated",
+      "version",
+      "contact_id",
+      "line1",
+      "line2",
+      "city",
+      "region",
+      "postal_code",
+      "country",
+    ]);
+    const group = det.expandedTypes.find((t) => t.name === "contact_group");
+    assert.ok(group?.fields.some((f) => f.name === "members"));
   });
 
   it("reads is_id and ids and skips injected id", async () => {

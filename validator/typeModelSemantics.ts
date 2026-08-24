@@ -8,6 +8,7 @@ const BUILT_IN: Record<string, readonly string[]> = {
   dictionary: ["name", "value"],
 };
 
+/** Primary label. `inherit` may also carry `union` — those members compose. */
 type TypeKind = "inherit" | "union" | "one_of" | "shaped";
 
 type TypeInfo = {
@@ -126,19 +127,17 @@ function inheritedNames(
   if (!info) return new Set();
   stack.add(name);
   const names = new Set<string>();
-  if (info.kind === "inherit" && info.inherits) {
+  if (info.inherits) {
     if (!(info.inherits === "set" && hasAuthoredIdentity(info))) {
       const parent = inheritedNames(info.inherits, types, stack);
       if ("cycle" in parent) return parent;
       for (const n of parent) names.add(n);
     }
   }
-  if (info.kind === "union") {
-    for (const member of info.union!) {
-      const part = inheritedNames(member, types, stack);
-      if ("cycle" in part) return part;
-      for (const n of part) names.add(n);
-    }
+  for (const member of info.union ?? []) {
+    const part = inheritedNames(member, types, stack);
+    if ("cycle" in part) return part;
+    for (const n of part) names.add(n);
   }
   stack.delete(name);
   if (info.mapping) {
@@ -158,7 +157,7 @@ function checkComposition(
   const errors: SpecValidationResult["errors"] = [];
   for (const [name, info] of types) {
     const sources: string[] = [];
-    if (info.kind === "inherit" && info.inherits) {
+    if (info.inherits) {
       if (!BUILT_IN[info.inherits] && !types.has(info.inherits)) {
         errors.push(
           specErr(
@@ -171,26 +170,26 @@ function checkComposition(
         sources.push(info.inherits);
       }
     }
-    const members =
-      info.kind === "union"
-        ? info.union
-        : info.kind === "one_of"
-          ? info.oneOf
-          : undefined;
-    const key = info.kind === "union" ? "union" : "one_of";
-    members?.forEach((member, i) => {
-      if (BUILT_IN[member] || types.has(member)) {
-        sources.push(member);
-        return;
-      }
-      errors.push(
-        specErr(
-          parsed,
-          `${info.path}/${key}/${i}`,
-          `unknown type '${member}' in ${key} on ${name}`,
-        ),
-      );
-    });
+    const checkMembers = (
+      members: string[] | undefined,
+      key: "union" | "one_of",
+    ) => {
+      members?.forEach((member, i) => {
+        if (BUILT_IN[member] || types.has(member)) {
+          sources.push(member);
+          return;
+        }
+        errors.push(
+          specErr(
+            parsed,
+            `${info.path}/${key}/${i}`,
+            `unknown type '${member}' in ${key} on ${name}`,
+          ),
+        );
+      });
+    };
+    checkMembers(info.union, "union");
+    checkMembers(info.oneOf, "one_of");
 
     const available = new Set<string>();
     for (const src of sources) {

@@ -247,9 +247,15 @@ class Parser {
         name,
         tags: node.strings("tags"),
         kind,
-        ...(kind === "inherit" ? { inherits: node.str("inherits") } : {}),
-        ...(kind === "union" ? { union: node.strings("union") } : {}),
-        ...(kind === "one_of" ? { oneOf: node.strings("one_of") } : {}),
+        ...(node.str("inherits") !== undefined
+          ? { inherits: node.str("inherits") }
+          : {}),
+        ...(Array.isArray(node.child("union").value)
+          ? { union: node.strings("union") }
+          : {}),
+        ...(Array.isArray(node.child("one_of").value)
+          ? { oneOf: node.strings("one_of") }
+          : {}),
         ...(mapping ? { mapping } : {}),
         ...(removeFields.length > 0 ? { removeFields } : {}),
         ...(ids.length > 0 ? { ids } : {}),
