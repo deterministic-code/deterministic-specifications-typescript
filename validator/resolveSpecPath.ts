@@ -14,8 +14,9 @@ const SPEC_REPO = "deterministic-specifications";
 /**
  * Walk ancestor directories of `start` (default: this module) for the first
  * `<ancestor>/<relPath>` that exists. Also checks a sibling
- * `deterministic-specifications/<relPath>` so this package can resolve live
- * specs and samples when it sits next to that repo.
+ * `deterministic-specifications/<relPath>` so this package can *read* live
+ * specs and samples when it sits next to that repo. Never use this path to
+ * write into the specifications repo.
  */
 export async function findAncestorPath(
   relPath: string,
