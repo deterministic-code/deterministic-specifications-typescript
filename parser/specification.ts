@@ -5,12 +5,7 @@ export const SERVICES_YAML = "services.yaml";
 export const ROUTES_YAML = "routes.yaml";
 
 export type SeedValue = string | number | boolean | null;
-
-export type SeedRow = {
-  id: number;
-  row: Record<string, SeedValue>;
-};
-
+export type SeedRow = { id: number; row: Record<string, SeedValue> };
 export type FieldKind = "primitive" | "type";
 
 export type TypeField = {
@@ -52,11 +47,7 @@ export type DatasourceFieldOverlay = {
   isFixedId?: boolean;
 };
 
-export type DatasourceIndex = {
-  name: string;
-  fields: string[];
-  isUnique: boolean;
-};
+export type DatasourceIndex = { name: string; fields: string[]; isUnique: boolean };
 
 export type DatasourceTable = {
   name: string;
@@ -67,11 +58,7 @@ export type DatasourceTable = {
   uniqueIndexFields: string[];
 };
 
-export type ServiceByField = {
-  field: string;
-  type: string;
-  size?: number;
-};
+export type ServiceByField = { field: string; type: string; size?: number };
 
 export type ServiceCandidate = {
   name: string;
@@ -80,22 +67,9 @@ export type ServiceCandidate = {
   byFields: ServiceByField[];
 };
 
-export type CustomServiceEntry = {
-  name: string;
-  module?: string;
-  methods: string[];
-};
-
-export type ParsedServices = {
-  generics: ServiceCandidate[];
-  customs: CustomServiceEntry[];
-};
-
-export type RouteByField = {
-  byField: string;
-  methods?: string[];
-  byFieldUnique: boolean;
-};
+export type CustomServiceEntry = { name: string; module?: string; methods: string[] };
+export type ParsedServices = { generics: ServiceCandidate[]; customs: CustomServiceEntry[] };
+export type RouteByField = { byField: string; methods?: string[]; byFieldUnique: boolean };
 
 export type RouteCandidate = {
   name: string;
@@ -118,29 +92,27 @@ export type CustomRouteEntry = {
   routeClass?: string;
 };
 
-export type DirectFkDescriptor = {
-  kind: "direct-fk";
+type NestedRouteBase = {
   parent: string;
   parentParam: string;
   parentBasePath: string;
-  child: { name: string };
-  fkColumn: string;
   segment: string;
   segmentTail: string;
 };
 
-export type M2mDescriptor = {
+export type DirectFkDescriptor = NestedRouteBase & {
+  kind: "direct-fk";
+  child: { name: string };
+  fkColumn: string;
+};
+
+export type M2mDescriptor = NestedRouteBase & {
   kind: "m2m";
-  parent: string;
-  parentParam: string;
-  parentBasePath: string;
   junction: string;
   target: string;
   targetParam: string;
   parentFkField: string;
   childFkField: string;
-  segment: string;
-  segmentTail: string;
 };
 
 export type NestedRouteDescriptor = DirectFkDescriptor | M2mDescriptor;
@@ -154,46 +126,41 @@ export type ParsedRoutes = {
 };
 
 const PRIMITIVES = new Set([
-  "string",
-  "character",
-  "number",
-  "integer",
-  "unsignedinteger",
-  "biginteger",
-  "unsignedbiginteger",
-  "smallinteger",
-  "unsignedsmallinteger",
-  "float",
-  "decimal",
-  "boolean",
-  "datetime",
-  "binary",
-  "uuid",
-  "reference",
+  "string", "character", "number", "integer", "unsignedinteger",
+  "biginteger", "unsignedbiginteger", "smallinteger", "unsignedsmallinteger",
+  "float", "decimal", "boolean", "datetime", "binary", "uuid", "reference",
 ]);
+
+const SET_FIELDS: TypeField[] = [{
+  name: "id",
+  type: "integer",
+  kind: "primitive",
+  base: "integer",
+  isArray: false,
+  isNullable: false,
+}];
 
 export const parseFieldType = (
   raw: string,
 ): { kind: FieldKind; base: string; isArray: boolean } => {
   const isArray = raw.endsWith("[]");
   const base = isArray ? raw.slice(0, -2) : raw;
-  if (PRIMITIVES.has(base)) return { kind: "primitive", base, isArray };
-  return { kind: "type", base, isArray };
+  return { kind: PRIMITIVES.has(base) ? "primitive" : "type", base, isArray };
 };
 
 type IdentityType = Pick<Type, "inherits" | "fields" | "ids">;
 
+const markedIds = (type: IdentityType): string[] =>
+  type.fields.filter((f) => f.isId === true).map((f) => f.name);
+
 export const hasAuthoredIdentity = (type: IdentityType): boolean =>
-  (type.ids !== undefined && type.ids.length > 0) ||
-  type.fields.some((f) => f.isId === true);
+  (type.ids !== undefined && type.ids.length > 0) || markedIds(type).length > 0;
 
 export const identityColumns = (type?: IdentityType): string[] => {
   if (!type) return ["id"];
   if (type.ids !== undefined && type.ids.length > 0) return [...type.ids];
-  const marked = type.fields.filter((f) => f.isId === true).map((f) => f.name);
-  if (marked.length > 0) return marked;
-  if (type.inherits === "set") return ["id"];
-  return [];
+  const marked = markedIds(type);
+  return marked.length > 0 ? marked : type.inherits === "set" ? ["id"] : [];
 };
 
 export const primaryKeyColumn = (
@@ -216,51 +183,16 @@ export const uniqueLookupFields = (
     });
   };
   for (const name of identityColumns(type)) add(name);
-  for (const overlay of table?.fields ?? []) {
-    if (overlay.isUnique) add(overlay.name);
-  }
+  for (const overlay of table?.fields ?? []) if (overlay.isUnique) add(overlay.name);
   for (const name of table?.uniqueIndexFields ?? []) add(name);
   return out;
 };
 
-const field = (
-  name: string,
-  type: string,
-  extras: Partial<TypeField> = {},
-): TypeField => {
-  const parsed = parseFieldType(type);
-  return {
-    name,
-    type,
-    kind: parsed.kind,
-    base: parsed.base,
-    isArray: parsed.isArray,
-    isNullable: false,
-    ...extras,
-  };
-};
-
-const builtInFields = (name: string): TypeField[] | undefined => {
-  if (name === "set") {
-    return [field("id", "integer")];
-  }
-  return undefined;
-};
-
 type SourcedField = TypeField & { source?: string; original?: string };
 
-const withSource = (fields: TypeField[], source: string): SourcedField[] =>
-  fields.map((f) => ({ ...f, source, original: f.name }));
-
-const publicField = (field: SourcedField): TypeField => {
-  const { source: _source, original: _original, ...rest } = field;
-  return rest;
-};
-
-const splitRef = (ref: string): { type: string; field: string } => {
-  const dot = ref.indexOf(".");
-  if (dot === -1) return { type: "", field: ref };
-  return { type: ref.slice(0, dot), field: ref.slice(dot + 1) };
+const splitDot = (value: string): [string, string] | undefined => {
+  const i = value.indexOf(".");
+  return i === -1 ? undefined : [value.slice(0, i), value.slice(i + 1)];
 };
 
 const identityFieldNames = (
@@ -271,10 +203,8 @@ const identityFieldNames = (
   if (!type) return new Set();
   /* v8 ignore next -- expandTypes already rejects inherit cycles */
   if (stack.has(type.name)) return new Set();
-  if (type.ids !== undefined && type.ids.length > 0) return new Set(type.ids);
-  const marked = type.fields.filter((f) => f.isId === true).map((f) => f.name);
-  if (marked.length > 0) return new Set(marked);
-  if (type.inherits === "set") return new Set(["id"]);
+  const local = identityColumns(type);
+  if (local.length > 0) return new Set(local);
   if (type.inherits && type.inherits !== "dictionary") {
     stack.add(type.name);
     return identityFieldNames(byName.get(type.inherits), byName, stack);
@@ -284,13 +214,16 @@ const identityFieldNames = (
 
 /** Owner FK is omitted when a dictionary is flattened onto another type. */
 const isOwnerIdentityRef = (
-  references: string | [string, string] | undefined,
+  references: TypeField["references"],
   selfName: string,
   byName: Map<string, Type>,
 ): boolean => {
   if (references === undefined) return false;
   const parts = (Array.isArray(references) ? references : [references]).map(
-    splitRef,
+    (ref) => {
+      const split = splitDot(ref);
+      return split ? { type: split[0], field: split[1] } : { type: "", field: ref };
+    },
   );
   const owner = parts[0]!.type;
   if (!owner || owner === selfName) return false;
@@ -306,37 +239,28 @@ const extractFields = (
   if (!extract?.length) return fields;
   const allow = new Map<string, Set<string>>();
   for (const item of extract) {
-    const dot = item.indexOf(".");
-    if (dot === -1) continue;
-    const source = item.slice(0, dot);
-    const name = item.slice(dot + 1);
-    let set = allow.get(source);
-    if (!set) {
-      set = new Set();
-      allow.set(source, set);
-    }
-    set.add(name);
+    const split = splitDot(item);
+    if (!split) continue;
+    const set = allow.get(split[0]) ?? new Set<string>();
+    set.add(split[1]);
+    allow.set(split[0], set);
   }
   return fields.filter((f) => {
     const keep = allow.get(f.source!);
-    if (!keep) return true;
-    return keep.has(f.name);
+    return !keep || keep.has(f.name);
   });
 };
 
 const renameFields = (
   fields: SourcedField[],
   mapping?: Record<string, string>,
-): SourcedField[] => {
-  if (!mapping) return fields;
-  return fields.map((f) => {
-    const qualified = mapping[`${f.source}.${f.name}`];
-    if (qualified !== undefined) return { ...f, name: qualified };
-    const bare = mapping[f.name];
-    if (bare !== undefined) return { ...f, name: bare };
-    return f;
-  });
-};
+): SourcedField[] =>
+  mapping
+    ? fields.map((f) => {
+        const name = mapping[`${f.source}.${f.name}`] ?? mapping[f.name];
+        return name !== undefined ? { ...f, name } : f;
+      })
+    : fields;
 
 const assertUniqueFieldNames = (
   fields: SourcedField[],
@@ -346,10 +270,8 @@ const assertUniqueFieldNames = (
   for (const field of fields) {
     const prev = seen.get(field.name);
     if (prev) {
-      const left = `${prev.source}.${prev.original}`;
-      const right = `${field.source}.${field.original}`;
       throw new Error(
-        `${left} and ${right} collide on the composed shape of ${typeName}; use mapping or remove_fields and give new names`,
+        `${prev.source}.${prev.original} and ${field.source}.${field.original} collide on the composed shape of ${typeName}; use mapping or remove_fields and give new names`,
       );
     }
     seen.set(field.name, field);
@@ -357,30 +279,21 @@ const assertUniqueFieldNames = (
 };
 
 /** Bare `id` drops every field named `id`. Qualified `contact_source.id` drops `id` only from that source. */
-const shouldDrop = (field: SourcedField, remove: string[]): boolean => {
-  for (const item of remove) {
-    const dot = item.indexOf(".");
-    if (dot === -1) {
-      if (field.name === item) return true;
-      continue;
-    }
-    if (
-      field.name === item.slice(dot + 1) &&
-      field.source === item.slice(0, dot)
-    ) {
-      return true;
-    }
-  }
-  return false;
-};
-
 const keepFields = (
   fields: SourcedField[],
   remove?: string[],
-): SourcedField[] => {
-  if (!remove?.length) return fields;
-  return fields.filter((f) => !shouldDrop(f, remove));
-};
+): SourcedField[] =>
+  remove?.length
+    ? fields.filter(
+        (f) =>
+          !remove.some((item) => {
+            const split = splitDot(item);
+            return split
+              ? f.name === split[1] && f.source === split[0]
+              : f.name === item;
+          }),
+      )
+    : fields;
 
 export const expandTypes = (types: Type[]): Type[] => {
   const byName = new Map(types.map((t) => [t.name, t]));
@@ -389,10 +302,9 @@ export const expandTypes = (types: Type[]): Type[] => {
   const resolve = (name: string, stack: Set<string>): TypeField[] => {
     const hit = cache.get(name);
     if (hit) return hit;
-    const builtin = builtInFields(name);
-    if (builtin) {
-      cache.set(name, builtin);
-      return builtin;
+    if (name === "set") {
+      cache.set(name, SET_FIELDS);
+      return SET_FIELDS;
     }
     if (stack.has(name)) {
       throw new Error(`circular inherit/union involving "${name}"`);
@@ -401,36 +313,33 @@ export const expandTypes = (types: Type[]): Type[] => {
     if (!type) return [];
     stack.add(name);
     const composeSource = (source: string): SourcedField[] => {
-      const fields = withSource(resolve(source, stack), source);
+      const fields = resolve(source, stack).map((f) => ({
+        ...f,
+        source,
+        original: f.name,
+      }));
       const srcType = byName.get(source);
-      if (srcType?.inherits !== "dictionary") return fields;
-      return fields.filter(
-        (f) => !isOwnerIdentityRef(f.references, srcType.name, byName),
-      );
+      return srcType?.inherits === "dictionary"
+        ? fields.filter(
+            (f) => !isOwnerIdentityRef(f.references, srcType.name, byName),
+          )
+        : fields;
     };
-    let inherited: SourcedField[] = [];
-    if (type.inherits) {
-      inherited =
-        type.inherits === "set" && hasAuthoredIdentity(type)
-          ? []
-          : composeSource(type.inherits);
-    }
-    for (const member of type.union ?? []) {
-      inherited = [...inherited, ...composeSource(member)];
-    }
+    const skipSetId = type.inherits === "set" && hasAuthoredIdentity(type);
+    const inherited = [
+      ...(type.inherits && !skipSetId ? composeSource(type.inherits) : []),
+      ...(type.union ?? []).flatMap(composeSource),
+    ];
     stack.delete(name);
-    const kept = keepFields(
-      renameFields(extractFields(inherited, type.extract), type.mapping),
-      type.removeFields,
-    );
-    const local: SourcedField[] = type.fields.map((f) => ({
-      ...f,
-      source: name,
-      original: f.name,
-    }));
-    const merged = [...kept, ...local];
+    const merged = [
+      ...keepFields(
+        renameFields(extractFields(inherited, type.extract), type.mapping),
+        type.removeFields,
+      ),
+      ...type.fields.map((f) => ({ ...f, source: name, original: f.name })),
+    ];
     assertUniqueFieldNames(merged, name);
-    const result = merged.map(publicField);
+    const result = merged.map(({ source: _s, original: _o, ...rest }) => rest);
     cache.set(name, result);
     return result;
   };
@@ -441,11 +350,7 @@ export const expandTypes = (types: Type[]): Type[] => {
     if (!type) return undefined;
     if (type.ids !== undefined && type.ids.length > 0) return type.ids;
     if (type.fields.some((f) => f.isId === true)) return undefined;
-    if (
-      type.inherits &&
-      type.inherits !== "set" &&
-      type.inherits !== "dictionary"
-    ) {
+    if (type.inherits && type.inherits !== "set" && type.inherits !== "dictionary") {
       stack.add(name);
       const ids = resolveIds(type.inherits, stack);
       stack.delete(name);
