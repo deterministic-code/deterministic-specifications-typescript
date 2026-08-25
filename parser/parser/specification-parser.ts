@@ -254,6 +254,7 @@ class Parser {
     return YamlNode.fromYaml(yaml).namedList("types").map(({ name, node }) => {
       const kind = typeKind(node);
       const mapping = mappingOf(node);
+      const extract = node.strings("extract");
       const removeFields = node.strings("remove_fields");
       const ids = node.strings("ids");
       return {
@@ -267,6 +268,7 @@ class Parser {
           ? { union: node.strings("union") }
           : {}),
         ...(mapping ? { mapping } : {}),
+        ...(extract.length > 0 ? { extract } : {}),
         ...(removeFields.length > 0 ? { removeFields } : {}),
         ...(ids.length > 0 ? { ids } : {}),
         fields: node.namedList("fields").map(({ name: fname, node: fnode }) =>

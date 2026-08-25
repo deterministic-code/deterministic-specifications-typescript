@@ -497,4 +497,108 @@ describe("specification helpers", () => {
     );
   });
 
+  it("extracts and renames qualified fields from a multi-union", () => {
+    const field = (
+      name: string,
+      extras: Partial<Type["fields"][number]> = {},
+    ): Type["fields"][number] => ({
+      name,
+      type: "string",
+      kind: "primitive",
+      base: "string",
+      isArray: false,
+      isNullable: false,
+      ...extras,
+    });
+    const expanded = expandTypes([
+      shaped("contacts_base", [field("email")], {
+        kind: "inherit",
+        inherits: "set",
+      }),
+      shaped("contact_source", [field("name")], {
+        kind: "inherit",
+        inherits: "set",
+      }),
+      shaped("contact_type", [field("name")], {
+        kind: "inherit",
+        inherits: "set",
+      }),
+      shaped("contact", [], {
+        kind: "inherit",
+        inherits: "contacts_base",
+        union: ["contact_source", "contact_type"],
+        extract: ["contact_source.name", "contact_type.name"],
+        mapping: {
+          "contact_source.name": "contact_source_name",
+          "contact_type.name": "contact_type_name",
+        },
+        tags: ["view_type"],
+      }),
+    ]);
+    assert.deepEqual(
+      expanded.find((t) => t.name === "contact")?.fields.map((f) => f.name),
+      ["id", "email", "contact_source_name", "contact_type_name"],
+    );
+  });
+
+  it("ignores bare extract entries and keeps unmentioned sources", () => {
+    const field = (
+      name: string,
+    ): Type["fields"][number] => ({
+      name,
+      type: "string",
+      kind: "primitive",
+      base: "string",
+      isArray: false,
+      isNullable: false,
+    });
+    const expanded = expandTypes([
+      shaped("user", [field("email"), field("bio")], {
+        kind: "inherit",
+        inherits: "set",
+      }),
+      shaped("person", [field("display_name")], {
+        kind: "inherit",
+        inherits: "user",
+        extract: ["name", "user.email", "user.id"],
+      }),
+    ]);
+    assert.deepEqual(
+      expanded.find((t) => t.name === "person")?.fields.map((f) => f.name),
+      ["id", "email", "display_name"],
+    );
+  });
+
+  it("throws when composed field names collide", () => {
+    const field = (
+      name: string,
+    ): Type["fields"][number] => ({
+      name,
+      type: "string",
+      kind: "primitive",
+      base: "string",
+      isArray: false,
+      isNullable: false,
+    });
+    assert.throws(
+      () =>
+        expandTypes([
+          shaped("contact_source", [field("name")], {
+            kind: "inherit",
+            inherits: "set",
+          }),
+          shaped("contact_type", [field("name")], {
+            kind: "inherit",
+            inherits: "set",
+          }),
+          shaped("contact", [], {
+            kind: "union",
+            union: ["contact_source", "contact_type"],
+            tags: ["view_type"],
+          }),
+        ]),
+      /duplicate field 'id' on the composed shape of contact/,
+    );
+  });
+
 });

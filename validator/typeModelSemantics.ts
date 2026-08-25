@@ -18,12 +18,16 @@ type TypeInfo = {
   union?: string[];
   mapping?: Record<string, string>;
   mappingPath?: string;
+  extract?: string[];
+  extractPath?: string;
   removeFields?: string[];
   removeFieldsPath?: string;
   ids?: string[];
   idFields: string[];
   fields: Map<string, string>;
 };
+
+type SourcedName = { source: string; name: string };
 
 const hasAuthoredIdentity = (info: TypeInfo): boolean =>
   (info.ids !== undefined && info.ids.length > 0) || info.idFields.length > 0;
@@ -108,6 +112,8 @@ function collectTypes(
       union: stringList(def.union),
       mapping: mappingOf(def),
       mappingPath: def.mapping !== undefined ? `${path}/mapping` : undefined,
+      extract: stringList(def.extract),
+      extractPath: def.extract !== undefined ? `${path}/extract` : undefined,
       removeFields: stringList(def.remove_fields),
       removeFieldsPath:
         def.remove_fields !== undefined ? `${path}/remove_fields` : undefined,
@@ -119,41 +125,115 @@ function collectTypes(
   return { types, errors };
 }
 
+function applyExtract(
+  fields: SourcedName[],
+  extract?: string[],
+): SourcedName[] {
+  if (!extract?.length) return fields;
+  const allow = new Map<string, Set<string>>();
+  for (const item of extract) {
+    const ref = splitRemoveField(item);
+    if (ref.source === undefined) continue;
+    let set = allow.get(ref.source);
+    if (!set) {
+      set = new Set();
+      allow.set(ref.source, set);
+    }
+    set.add(ref.name);
+  }
+  return fields.filter((f) => {
+    const keep = allow.get(f.source);
+    if (!keep) return true;
+    return keep.has(f.name);
+  });
+}
+
+function applyMapping(
+  fields: SourcedName[],
+  mapping?: Record<string, string>,
+): SourcedName[] {
+  if (!mapping) return fields;
+  return fields.map((f) => {
+    const qualified = mapping[`${f.source}.${f.name}`];
+    if (qualified !== undefined) return { ...f, name: qualified };
+    const bare = mapping[f.name];
+    if (bare !== undefined) return { ...f, name: bare };
+    return f;
+  });
+}
+
+function applyRemove(
+  fields: SourcedName[],
+  remove?: string[],
+): SourcedName[] {
+  if (!remove?.length) return fields;
+  return fields.filter((f) => {
+    for (const item of remove) {
+      const ref = splitRemoveField(item);
+      if (ref.source === undefined) {
+        if (f.name === ref.name) return false;
+        continue;
+      }
+      if (f.source === ref.source && f.name === ref.name) return false;
+    }
+    return true;
+  });
+}
+
+function parentFields(
+  name: string,
+  types: Map<string, TypeInfo>,
+  stack: Set<string>,
+): SourcedName[] | { cycle: string } {
+  const resolved = composeFields(name, types, stack);
+  if ("cycle" in resolved) return resolved;
+  return resolved.map((f) => ({ source: name, name: f.name }));
+}
+
+function composeFields(
+  name: string,
+  types: Map<string, TypeInfo>,
+  stack: Set<string>,
+): SourcedName[] | { cycle: string } {
+  if (BUILT_IN[name]) return BUILT_IN[name].map((n) => ({ source: name, name: n }));
+  if (stack.has(name)) return { cycle: name };
+  const info = types.get(name);
+  /* v8 ignore next -- callers only pass built-ins or collected type names */
+  if (!info) return [];
+  stack.add(name);
+  const fields: SourcedName[] = [];
+  if (info.inherits) {
+    if (!(info.inherits === "set" && hasAuthoredIdentity(info))) {
+      const parent = parentFields(info.inherits, types, stack);
+      if ("cycle" in parent) return parent;
+      fields.push(...parent);
+    }
+  }
+  for (const member of info.union ?? []) {
+    const part = parentFields(member, types, stack);
+    if ("cycle" in part) return part;
+    fields.push(...part);
+  }
+  stack.delete(name);
+  const kept = applyRemove(
+    applyMapping(applyExtract(fields, info.extract), info.mapping),
+    info.removeFields,
+  );
+  const out: SourcedName[] = kept.map((f) => ({ source: name, name: f.name }));
+  for (const local of info.fields.keys()) {
+    out.push({ source: name, name: local });
+  }
+  return out;
+}
+
 function inheritedNames(
   name: string,
   types: Map<string, TypeInfo>,
   stack: Set<string>,
 ): Set<string> | { cycle: string } {
-  if (BUILT_IN[name]) return new Set(BUILT_IN[name]);
-  if (stack.has(name)) return { cycle: name };
-  const info = types.get(name);
-  /* v8 ignore next -- callers only pass built-ins or collected type names */
-  if (!info) return new Set();
-  stack.add(name);
-  const names = new Set<string>();
-  if (info.inherits) {
-    if (!(info.inherits === "set" && hasAuthoredIdentity(info))) {
-      const parent = inheritedNames(info.inherits, types, stack);
-      if ("cycle" in parent) return parent;
-      for (const n of parent) names.add(n);
-    }
-  }
-  for (const member of info.union ?? []) {
-    const part = inheritedNames(member, types, stack);
-    if ("cycle" in part) return part;
-    for (const n of part) names.add(n);
-  }
-  stack.delete(name);
-  if (info.mapping) {
-    for (const [from, to] of Object.entries(info.mapping)) {
-      if (names.delete(from)) names.add(to);
-    }
-  }
-  for (const drop of info.removeFields ?? []) {
-    names.delete(splitRemoveField(drop).name);
-  }
-  for (const local of info.fields.keys()) names.add(local);
-  return names;
+  const resolved = composeFields(name, types, stack);
+  if ("cycle" in resolved) return resolved;
+  return new Set(resolved.map((f) => f.name));
 }
 
 function checkComposition(
@@ -190,10 +270,11 @@ function checkComposition(
       );
     });
 
+    const sourced: SourcedName[] = [];
     const available = new Set<string>();
     for (const src of sources) {
       if (src === "set" && hasAuthoredIdentity(info)) continue;
-      const part = inheritedNames(src, types, new Set([name]));
+      const part = parentFields(src, types, new Set([name]));
       if ("cycle" in part) {
         errors.push(
           specErr(
@@ -204,24 +285,92 @@ function checkComposition(
         );
         continue;
       }
-      for (const n of part) available.add(n);
+      sourced.push(...part);
+      for (const f of part) available.add(f.name);
     }
 
-    if (info.mapping) {
-      Object.keys(info.mapping).forEach((from) => {
-        if (available.has(from)) return;
-        errors.push(
-          specErr(
-            parsed,
-            `${info.mappingPath}/${from}`,
-            `mapping '${from}' is not a field on the inherited or unioned shape of ${name}`,
-          ),
-        );
-      });
-    }
     const composeSources = new Set<string>();
     if (info.inherits) composeSources.add(info.inherits);
     for (const member of info.union ?? []) composeSources.add(member);
+
+    const checkQualified = (
+      field: string,
+      path: string,
+      label: string,
+    ): boolean => {
+      const ref = splitRemoveField(field);
+      if (ref.source === undefined) return false;
+      if (!BUILT_IN[ref.source] && !types.has(ref.source)) {
+        errors.push(
+          specErr(
+            parsed,
+            path,
+            `unknown type '${ref.source}' in ${label} on ${name}`,
+          ),
+        );
+        return true;
+      }
+      if (!composeSources.has(ref.source)) {
+        errors.push(
+          specErr(
+            parsed,
+            path,
+            `${label} '${field}' is not from an inherit or union source of ${name}`,
+          ),
+        );
+        return true;
+      }
+      const part = inheritedNames(ref.source, types, new Set([name]));
+      if ("cycle" in part) return true;
+      if (part.has(ref.name)) return true;
+      errors.push(
+        specErr(
+          parsed,
+          path,
+          `${label} '${field}' is not a field on ${ref.source}`,
+        ),
+      );
+      return true;
+    };
+
+    info.extract?.forEach((field, i) => {
+      const path = `${info.extractPath}/${i}`;
+      if (checkQualified(field, path, "extract")) return;
+      errors.push(
+        specErr(
+          parsed,
+          path,
+          `extract '${field}' is not a field on the inherited or unioned shape of ${name}`,
+        ),
+      );
+    });
+
+    if (info.mapping) {
+      Object.keys(info.mapping).forEach((from) => {
+        const path = `${info.mappingPath}/${from}`;
+        if (checkQualified(from, path, "mapping")) return;
+        const matches = sourced.filter((f) => f.name === from);
+        if (matches.length === 0) {
+          errors.push(
+            specErr(
+              parsed,
+              path,
+              `mapping '${from}' is not a field on the inherited or unioned shape of ${name}`,
+            ),
+          );
+          return;
+        }
+        if (matches.length > 1) {
+          errors.push(
+            specErr(
+              parsed,
+              path,
+              `mapping '${from}' matches more than one source on ${name}; qualify it`,
+            ),
+          );
+        }
+      });
+    }
 
     info.removeFields?.forEach((field, i) => {
       const path = `${info.removeFieldsPath}/${i}`;
@@ -237,37 +386,31 @@ function checkComposition(
         );
         return;
       }
-      if (!BUILT_IN[ref.source] && !types.has(ref.source)) {
-        errors.push(
-          specErr(
-            parsed,
-            path,
-            `unknown type '${ref.source}' in remove_fields on ${name}`,
-          ),
-        );
-        return;
-      }
-      if (!composeSources.has(ref.source)) {
-        errors.push(
-          specErr(
-            parsed,
-            path,
-            `remove_fields '${field}' is not from an inherit or union source of ${name}`,
-          ),
-        );
-        return;
-      }
-      const part = inheritedNames(ref.source, types, new Set([name]));
-      if ("cycle" in part) return;
-      if (part.has(ref.name)) return;
-      errors.push(
-        specErr(
-          parsed,
-          path,
-          `remove_fields '${field}' is not a field on ${ref.source}`,
-        ),
-      );
+      checkQualified(field, path, "remove_fields");
     });
+
+    const composed = applyRemove(
+      applyMapping(applyExtract(sourced, info.extract), info.mapping),
+      info.removeFields,
+    );
+    const seenNames = new Set<string>();
+    const reportDup = (fieldName: string, path: string) => {
+      if (seenNames.has(fieldName)) {
+        errors.push(
+          specErr(
+            parsed,
+            path,
+            `duplicate field '${fieldName}' on the composed shape of ${name}`,
+          ),
+        );
+        return;
+      }
+      seenNames.add(fieldName);
+    };
+    for (const field of composed) reportDup(field.name, info.path);
+    for (const [fieldName, fieldPath] of info.fields) {
+      reportDup(fieldName, fieldPath);
+    }
   }
   return errors;
 }
@@ -469,6 +612,7 @@ function typeInfoFromEntry(entry: unknown): { name: string; info: TypeInfo } | n
       inherits: typeof def.inherits === "string" ? def.inherits : undefined,
       union: stringList(def.union),
       mapping: mappingOf(def),
+      extract: stringList(def.extract),
       removeFields: stringList(def.remove_fields),
       ids: stringList(def.ids),
       idFields: Array.isArray(def.fields)

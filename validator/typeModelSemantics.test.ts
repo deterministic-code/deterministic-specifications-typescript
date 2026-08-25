@@ -143,13 +143,18 @@ types:
     expect(checkTypeModel(doc)).toEqual({ valid: true, errors: [] });
     const fields = indexTypeFields(doc.data).get("contact");
     expect([...fields?.keys() ?? []]).toEqual([
+      "id",
+      "uuid",
+      "created",
+      "updated",
+      "version",
       "contact_source_id",
       "first_name",
       "last_name",
       "email",
       "notes",
-      "description",
       "contact_source_name",
+      "description",
       "addresses",
       "phones",
     ]);
@@ -258,6 +263,175 @@ types:
     expect(
       messages.some((m) =>
         /remove_fields 'other.id' is not from an inherit or union source/.test(m),
+      ),
+    ).toBe(true);
+  });
+
+  test("accepts extract and qualified mapping on a multi-union contact", () => {
+    const doc = parsed(`version: 1.0.0
+types:
+  - contacts_base:
+      inherits: set
+      fields:
+        - email:
+            type: string
+  - contact_source:
+      inherits: set
+      fields:
+        - name:
+            type: string
+  - contact_type:
+      inherits: set
+      fields:
+        - name:
+            type: string
+  - contact:
+      inherits: contacts_base
+      union: [contact_source, contact_type]
+      extract: [contact_source.name, contact_type.name]
+      mapping:
+        contact_source.name: contact_source_name
+        contact_type.name: contact_type_name
+      fields: []
+`);
+    expect(checkTypeModel(doc)).toEqual({ valid: true, errors: [] });
+    expect([...indexTypeFields(doc.data).get("contact")?.keys() ?? []]).toEqual([
+      "id",
+      "email",
+      "contact_source_name",
+      "contact_type_name",
+    ]);
+  });
+
+  test("rejects a bare extract entry", () => {
+    const result = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - user:
+      inherits: set
+      fields:
+        - email:
+            type: string
+  - person:
+      inherits: user
+      extract: [email]
+      fields: []
+`),
+    );
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some((e) =>
+        /extract 'email' is not a field on the inherited or unioned shape/.test(
+          e.message,
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  test("rejects extract that misses the inherit or union source", () => {
+    const result = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - contacts_base:
+      inherits: set
+      fields:
+        - email:
+            type: string
+  - contact_source:
+      inherits: set
+      fields:
+        - name:
+            type: string
+  - other:
+      fields:
+        - name:
+            type: string
+  - contact:
+      inherits: contacts_base
+      union: [contact_source]
+      extract: [ghost.name, contacts_base.missing, other.name, contact_source.missing]
+      fields: []
+`),
+    );
+    expect(result.valid).toBe(false);
+    const messages = result.errors.map((e) => e.message);
+    expect(messages.some((m) => /unknown type 'ghost' in extract/.test(m))).toBe(
+      true,
+    );
+    expect(
+      messages.some((m) =>
+        /extract 'contacts_base.missing' is not a field on contacts_base/.test(m),
+      ),
+    ).toBe(true);
+    expect(
+      messages.some((m) =>
+        /extract 'other.name' is not from an inherit or union source/.test(m),
+      ),
+    ).toBe(true);
+    expect(
+      messages.some((m) =>
+        /extract 'contact_source.missing' is not a field on contact_source/.test(m),
+      ),
+    ).toBe(true);
+  });
+
+  test("rejects a bare mapping that matches more than one source", () => {
+    const result = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - contact_source:
+      inherits: set
+      fields:
+        - name:
+            type: string
+  - contact_type:
+      inherits: set
+      fields:
+        - name:
+            type: string
+  - contact:
+      union: [contact_source, contact_type]
+      mapping:
+        name: contact_name
+      fields: []
+`),
+    );
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some((e) =>
+        /mapping 'name' matches more than one source/.test(e.message),
+      ),
+    ).toBe(true);
+  });
+
+  test("rejects duplicate field names on the composed shape", () => {
+    const result = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - contact_source:
+      inherits: set
+      fields:
+        - name:
+            type: string
+  - contact_type:
+      inherits: set
+      fields:
+        - name:
+            type: string
+  - contact:
+      union: [contact_source, contact_type]
+      fields: []
+`),
+    );
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some((e) =>
+        /duplicate field 'id' on the composed shape of contact/.test(e.message),
+      ),
+    ).toBe(true);
+    expect(
+      result.errors.some((e) =>
+        /duplicate field 'name' on the composed shape of contact/.test(e.message),
       ),
     ).toBe(true);
   });

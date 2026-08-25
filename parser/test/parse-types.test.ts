@@ -72,6 +72,55 @@ describe("parse types.yaml", () => {
     assert.ok(!phone?.fields.some((f) => f.name === "id"));
   });
 
+  it("reads extract and qualified mapping", async () => {
+    const det = await parse({
+      "types.yaml": `types:
+  - contacts_base:
+      tags: [view_type]
+      inherits: set
+      fields:
+        - email:
+            type: string
+  - contact_source:
+      tags: [datasource_type]
+      inherits: set
+      fields:
+        - name:
+            type: string
+  - contact_type:
+      tags: [datasource_type]
+      inherits: set
+      fields:
+        - name:
+            type: string
+  - contact:
+      tags: [view_type]
+      inherits: contacts_base
+      union: [contact_source, contact_type]
+      extract: [contact_source.name, contact_type.name]
+      mapping:
+        contact_source.name: contact_source_name
+        contact_type.name: contact_type_name
+`,
+    });
+    const contact = det.types.find((t) => t.name === "contact");
+    assert.deepEqual(contact?.extract, [
+      "contact_source.name",
+      "contact_type.name",
+    ]);
+    assert.deepEqual(contact?.mapping, {
+      "contact_source.name": "contact_source_name",
+      "contact_type.name": "contact_type_name",
+    });
+    const expanded = det.expandedTypes.find((t) => t.name === "contact");
+    assert.deepEqual(expanded?.fields.map((f) => f.name), [
+      "id",
+      "email",
+      "contact_source_name",
+      "contact_type_name",
+    ]);
+  });
+
   it("keeps union members when inherits is also present", async () => {
     const det = await parse({ "types.yaml": CONTACTS_TYPES });
     const contact = det.types.find((t) => t.name === "contact");
