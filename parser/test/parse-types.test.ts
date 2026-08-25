@@ -32,9 +32,22 @@ describe("parse types.yaml", () => {
             type: string
   - role:
       tags: [datasource_type]
+      inherits: set
+      fields:
+        - name:
+            type: string
+        - code:
+            type: string
+  - settings:
+      tags: [datasource_type]
       inherits: dictionary
       fields:
-        - code:
+        - user_id:
+            references: user.id
+            type: integer
+        - key:
+            type: string
+        - value:
             type: string
   - person:
       tags: [view_type]
@@ -59,7 +72,13 @@ describe("parse types.yaml", () => {
     const user = det.expandedTypes.find((t) => t.name === "user");
     assert.deepEqual(user?.fields.map((f) => f.name), ["id", "email", "bio"]);
     const role = det.expandedTypes.find((t) => t.name === "role");
-    assert.deepEqual(role?.fields.map((f) => f.name), ["name", "value", "code"]);
+    assert.deepEqual(role?.fields.map((f) => f.name), ["id", "name", "code"]);
+    const settings = det.expandedTypes.find((t) => t.name === "settings");
+    assert.deepEqual(settings?.fields.map((f) => f.name), [
+      "user_id",
+      "key",
+      "value",
+    ]);
     const person = det.expandedTypes.find((t) => t.name === "person");
     assert.deepEqual(person?.fields.map((f) => f.name), [
       "id",

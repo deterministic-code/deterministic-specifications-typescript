@@ -104,20 +104,361 @@ types:
     expect(result.errors[0]?.message).toMatch(/unknown inherit target 'missing'/);
   });
 
-  test("accepts inherits set and dictionary", async () => {
+  test("accepts inherits set and an owned dictionary", async () => {
     const result = await validator().validate(doc(`types:
   - user:
       inherits: set
       fields:
         - email:
             type: string
-  - role:
+  - settings:
       inherits: dictionary
       fields:
-        - code:
+        - user_id:
+            references: user.id
+        - key:
+            type: string
+        - value:
             type: string
 `));
     expect(result).toEqual({ valid: true, errors: [] });
+  });
+
+  test("rejects a dictionary missing key, value, or an owner identity reference", () => {
+    const missingKey = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - user:
+      inherits: set
+      fields:
+        - email:
+            type: string
+  - settings:
+      inherits: dictionary
+      fields:
+        - user_id:
+            references: user.id
+        - value:
+            type: string
+`),
+    );
+    expect(missingKey.valid).toBe(false);
+    expect(
+      missingKey.errors.some((e) =>
+        /dictionary type settings must include a key field/.test(e.message),
+      ),
+    ).toBe(true);
+
+    const missingValue = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - user:
+      inherits: set
+      fields:
+        - email:
+            type: string
+  - settings:
+      inherits: dictionary
+      fields:
+        - user_id:
+            references: user.id
+        - key:
+            type: string
+`),
+    );
+    expect(missingValue.valid).toBe(false);
+    expect(
+      missingValue.errors.some((e) =>
+        /dictionary type settings must include a value field/.test(e.message),
+      ),
+    ).toBe(true);
+
+    const missingOwner = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - settings:
+      inherits: dictionary
+      fields:
+        - key:
+            type: string
+        - value:
+            type: string
+`),
+    );
+    expect(missingOwner.valid).toBe(false);
+    expect(
+      missingOwner.errors.some((e) =>
+        /dictionary type settings must have one field that references the owner identity/
+          .test(e.message),
+      ),
+    ).toBe(true);
+
+    const nonIdentity = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - note:
+      fields:
+        - body:
+            type: string
+  - settings:
+      inherits: dictionary
+      fields:
+        - note_body:
+            references: note.body
+        - key:
+            type: string
+        - value:
+            type: string
+`),
+    );
+    expect(nonIdentity.valid).toBe(false);
+    expect(
+      nonIdentity.errors.some((e) =>
+        /dictionary type settings must have one field that references the owner identity/
+          .test(e.message),
+      ),
+    ).toBe(true);
+
+    const bareAndSelf = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - settings:
+      inherits: dictionary
+      fields:
+        - owner_id:
+            references: id
+        - other_id:
+            references: settings.key
+        - key:
+            type: string
+        - value:
+            type: string
+`),
+    );
+    expect(bareAndSelf.valid).toBe(false);
+    expect(
+      bareAndSelf.errors.some((e) =>
+        /dictionary type settings must have one field that references the owner identity/
+          .test(e.message),
+      ),
+    ).toBe(true);
+
+    const unknownOwner = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - settings:
+      inherits: dictionary
+      fields:
+        - owner_id:
+            references: ghost.id
+        - key:
+            type: string
+        - value:
+            type: string
+`),
+    );
+    expect(unknownOwner.valid).toBe(false);
+    expect(
+      unknownOwner.errors.some((e) =>
+        /dictionary type settings must have one field that references the owner identity/
+          .test(e.message),
+      ),
+    ).toBe(true);
+
+    const mixedOwner = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - left:
+      inherits: set
+  - right:
+      inherits: set
+  - settings:
+      inherits: dictionary
+      fields:
+        - pair:
+            references: [left.id, right.id]
+        - key:
+            type: string
+        - value:
+            type: string
+`),
+    );
+    expect(mixedOwner.valid).toBe(false);
+    expect(
+      mixedOwner.errors.some((e) =>
+        /dictionary type settings must have one field that references the owner identity/
+          .test(e.message),
+      ),
+    ).toBe(true);
+  });
+
+  test("accepts a dictionary owned by a composite identity", () => {
+    const result = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - link:
+      ids: [left_id, right_id]
+      fields:
+        - left_id:
+            type: integer
+        - right_id:
+            type: integer
+  - settings:
+      inherits: dictionary
+      fields:
+        - pair:
+            references: [link.left_id, link.right_id]
+        - key:
+            type: string
+        - value:
+            type: string
+`),
+    );
+    expect(result).toEqual({ valid: true, errors: [] });
+  });
+
+  test("accepts a dictionary owned by an inherited identity", () => {
+    const result = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - keyed:
+      fields:
+        - code:
+            type: integer
+            is_id: true
+  - alias:
+      inherits: keyed
+  - settings:
+      inherits: dictionary
+      fields:
+        - owner_id:
+            references: alias.code
+        - key:
+            type: string
+        - value:
+            type: string
+`),
+    );
+    expect(result).toEqual({ valid: true, errors: [] });
+  });
+
+  test("omits the dictionary owner FK from a nested compose", () => {
+    const doc = parsed(`version: 1.0.0
+types:
+  - file:
+      inherits: set
+      fields:
+        - name:
+            type: string
+  - settings:
+      inherits: dictionary
+      fields:
+        - setting_id:
+            references: file.id
+        - key:
+            type: string
+        - value:
+            type: string
+  - file_view:
+      inherits: file
+      union: [settings]
+`);
+    expect(checkTypeModel(doc)).toEqual({ valid: true, errors: [] });
+    expect([...indexTypeFields(doc.data).get("file_view")?.keys() ?? []]).toEqual([
+      "id",
+      "name",
+      "key",
+      "value",
+    ]);
+  });
+
+  test("does not treat a cycle or unknown parent as an owner identity", () => {
+    const cycled = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - a:
+      inherits: b
+      fields: []
+  - b:
+      inherits: a
+      fields: []
+  - settings:
+      inherits: dictionary
+      fields:
+        - owner_id:
+            references: a.id
+        - key:
+            type: string
+        - value:
+            type: string
+`),
+    );
+    expect(cycled.valid).toBe(false);
+    expect(
+      cycled.errors.some((e) =>
+        /dictionary type settings must have one field that references the owner identity/
+          .test(e.message),
+      ),
+    ).toBe(true);
+
+    const unknownParent = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - alias:
+      inherits: ghost
+      fields: []
+  - settings:
+      inherits: dictionary
+      fields:
+        - owner_id:
+            references: alias.id
+        - key:
+            type: string
+        - value:
+            type: string
+`),
+    );
+    expect(unknownParent.valid).toBe(false);
+    expect(
+      unknownParent.errors.some((e) =>
+        /dictionary type settings must have one field that references the owner identity/
+          .test(e.message),
+      ),
+    ).toBe(true);
+  });
+
+  test("rejects reserved type names set and dictionary", () => {
+    const asSet = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - set:
+      inherits: set
+      fields:
+        - name:
+            type: string
+`),
+    );
+    expect(asSet.valid).toBe(false);
+    expect(asSet.errors.some((e) => /'set' is a reserved type name/.test(e.message))).toBe(
+      true,
+    );
+
+    const asDictionary = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - dictionary:
+      inherits: set
+      fields:
+        - name:
+            type: string
+`),
+    );
+    expect(asDictionary.valid).toBe(false);
+    expect(
+      asDictionary.errors.some((e) =>
+        /'dictionary' is a reserved type name/.test(e.message),
+      ),
+    ).toBe(true);
   });
 
   test("rejects mapping and remove_fields that are not on the parent", async () => {
@@ -426,12 +767,68 @@ types:
     expect(result.valid).toBe(false);
     expect(
       result.errors.some((e) =>
-        /duplicate field 'id' on the composed shape of contact/.test(e.message),
+        /contact_source.id and contact_type.id collide on the composed shape of contact; use mapping or remove_fields and give new names/
+          .test(e.message),
       ),
     ).toBe(true);
     expect(
       result.errors.some((e) =>
-        /duplicate field 'name' on the composed shape of contact/.test(e.message),
+        /contact_source.name and contact_type.name collide on the composed shape of contact; use mapping or remove_fields and give new names/
+          .test(e.message),
+      ),
+    ).toBe(true);
+  });
+
+  test("rejects an inherit+union id clash", () => {
+    const result = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - contacts_base:
+      inherits: set
+      fields:
+        - email:
+            type: string
+  - contact_source:
+      inherits: set
+      fields:
+        - name:
+            type: string
+  - contact:
+      inherits: contacts_base
+      union: [contact_source]
+      fields: []
+`),
+    );
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some((e) =>
+        /contacts_base.id and contact_source.id collide on the composed shape of contact; use mapping or remove_fields and give new names/
+          .test(e.message),
+      ),
+    ).toBe(true);
+  });
+
+  test("rejects a local field that collides with an inherited field", () => {
+    const result = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - user:
+      inherits: set
+      fields:
+        - email:
+            type: string
+  - person:
+      inherits: user
+      fields:
+        - email:
+            type: string
+`),
+    );
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some((e) =>
+        /user.email and person.email collide on the composed shape of person; use mapping or remove_fields and give new names/
+          .test(e.message),
       ),
     ).toBe(true);
   });

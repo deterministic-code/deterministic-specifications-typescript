@@ -252,7 +252,7 @@ describe("specification helpers", () => {
     );
   });
 
-  it("expands set/dictionary inherit, mapping, and remove_fields", () => {
+  it("expands set inherit, mapping, and remove_fields", () => {
     const expanded = expandTypes(
       [
         shaped(
@@ -597,7 +597,181 @@ describe("specification helpers", () => {
             tags: ["view_type"],
           }),
         ]),
-      /duplicate field 'id' on the composed shape of contact/,
+      /contact_source.id and contact_type.id collide on the composed shape of contact; use mapping or remove_fields and give new names/,
+    );
+  });
+
+  it("flattens an owned dictionary as authored fields and omits the owner FK when nested", () => {
+    const field = (
+      name: string,
+      extras: Partial<Type["fields"][number]> = {},
+    ): Type["fields"][number] => ({
+      name,
+      type: "string",
+      kind: "primitive",
+      base: extras.type === "integer" ? "integer" : "string",
+      isArray: false,
+      isNullable: false,
+      ...extras,
+    });
+    const expanded = expandTypes([
+      shaped("file", [field("name")], { kind: "inherit", inherits: "set" }),
+      shaped(
+        "settings",
+        [
+          field("setting_id", {
+            type: "integer",
+            base: "integer",
+            references: "file.id",
+          }),
+          field("key"),
+          field("value"),
+        ],
+        { kind: "inherit", inherits: "dictionary" },
+      ),
+      shaped("file_view", [], {
+        kind: "inherit",
+        inherits: "file",
+        union: ["settings"],
+        tags: ["view_type"],
+      }),
+    ]);
+    assert.deepEqual(
+      expanded.find((t) => t.name === "settings")?.fields.map((f) => f.name),
+      ["setting_id", "key", "value"],
+    );
+    assert.deepEqual(
+      expanded.find((t) => t.name === "file_view")?.fields.map((f) => f.name),
+      ["id", "name", "key", "value"],
+    );
+  });
+
+  it("omits an owner FK that points at an inherited or composite identity", () => {
+    const field = (
+      name: string,
+      extras: Partial<Type["fields"][number]> = {},
+    ): Type["fields"][number] => ({
+      name,
+      type: extras.type ?? "string",
+      kind: "primitive",
+      base: extras.base ?? extras.type ?? "string",
+      isArray: false,
+      isNullable: false,
+      ...extras,
+    });
+    const expanded = expandTypes([
+      shaped(
+        "keyed",
+        [field("code", { type: "integer", base: "integer", isId: true })],
+      ),
+      shaped("alias", [], { kind: "inherit", inherits: "keyed" }),
+      shaped(
+        "settings",
+        [
+          field("owner_id", {
+            type: "integer",
+            base: "integer",
+            references: "alias.code",
+          }),
+          field("key"),
+          field("value"),
+        ],
+        { kind: "inherit", inherits: "dictionary" },
+      ),
+      shaped("alias_view", [], {
+        kind: "inherit",
+        inherits: "alias",
+        union: ["settings"],
+        tags: ["view_type"],
+      }),
+      shaped(
+        "link",
+        [
+          field("left_id", { type: "integer", base: "integer" }),
+          field("right_id", { type: "integer", base: "integer" }),
+        ],
+        { ids: ["left_id", "right_id"] },
+      ),
+      shaped(
+        "link_settings",
+        [
+          field("pair", {
+            type: "integer",
+            base: "integer",
+            references: ["link.left_id", "link.right_id"],
+          }),
+          field("key"),
+          field("value"),
+        ],
+        { kind: "inherit", inherits: "dictionary" },
+      ),
+      shaped("link_view", [], {
+        kind: "inherit",
+        inherits: "link",
+        union: ["link_settings"],
+        tags: ["view_type"],
+      }),
+    ]);
+    assert.deepEqual(
+      expanded.find((t) => t.name === "alias_view")?.fields.map((f) => f.name),
+      ["code", "key", "value"],
+    );
+    assert.deepEqual(
+      expanded.find((t) => t.name === "link_view")?.fields.map((f) => f.name),
+      ["left_id", "right_id", "key", "value"],
+    );
+  });
+
+  it("keeps a dictionary FK that is not the owner identity", () => {
+    const field = (
+      name: string,
+      extras: Partial<Type["fields"][number]> = {},
+    ): Type["fields"][number] => ({
+      name,
+      type: extras.type ?? "string",
+      kind: "primitive",
+      base: extras.base ?? extras.type ?? "string",
+      isArray: false,
+      isNullable: false,
+      ...extras,
+    });
+    const expanded = expandTypes([
+      shaped("note", [field("body")]),
+      shaped("orphan", [], { kind: "inherit", inherits: "ghost" }),
+      shaped(
+        "settings",
+        [
+          field("note_body", { references: "note.body" }),
+          field("bare", { references: "id" }),
+          field("self_id", { references: "settings.key" }),
+          field("ghost_id", { references: "ghost.id" }),
+          field("orphan_id", { references: "orphan.id" }),
+          field("mixed", { references: ["note.body", "orphan.id"] }),
+          field("key"),
+          field("value"),
+        ],
+        { kind: "inherit", inherits: "dictionary" },
+      ),
+      shaped("note_view", [], {
+        kind: "inherit",
+        inherits: "note",
+        union: ["settings"],
+        tags: ["view_type"],
+      }),
+    ]);
+    assert.deepEqual(
+      expanded.find((t) => t.name === "note_view")?.fields.map((f) => f.name),
+      [
+        "body",
+        "note_body",
+        "bare",
+        "self_id",
+        "ghost_id",
+        "orphan_id",
+        "mixed",
+        "key",
+        "value",
+      ],
     );
   });
 
