@@ -38,6 +38,7 @@ export type Type = {
   inherits?: string;
   union?: string[];
   mapping?: Record<string, string>;
+  extract?: string[];
   removeFields?: string[];
   ids?: string[];
   fields: TypeField[];
@@ -249,16 +250,6 @@ const builtInFields = (name: string): TypeField[] | undefined => {
   return undefined;
 };
 
-const renameFields = (
-  fields: TypeField[],
-  mapping?: Record<string, string>,
-): TypeField[] => {
-  if (!mapping) return fields;
-  return fields.map((f) =>
-    mapping[f.name] ? { ...f, name: mapping[f.name]! } : f,
-  );
-};
-
 type SourcedField = TypeField & { source?: string };
 
 const withSource = (fields: TypeField[], source: string): SourcedField[] =>
@@ -267,6 +258,58 @@ const withSource = (fields: TypeField[], source: string): SourcedField[] =>
 const publicField = (field: SourcedField): TypeField => {
   const { source: _source, ...rest } = field;
   return rest;
+};
+
+/** For each source named in extract, keep only the listed fields. Unmentioned sources stay intact. */
+const extractFields = (
+  fields: SourcedField[],
+  extract?: string[],
+): SourcedField[] => {
+  if (!extract?.length) return fields;
+  const allow = new Map<string, Set<string>>();
+  for (const item of extract) {
+    const dot = item.indexOf(".");
+    if (dot === -1) continue;
+    const source = item.slice(0, dot);
+    const name = item.slice(dot + 1);
+    let set = allow.get(source);
+    if (!set) {
+      set = new Set();
+      allow.set(source, set);
+    }
+    set.add(name);
+  }
+  return fields.filter((f) => {
+    const keep = allow.get(f.source!);
+    if (!keep) return true;
+    return keep.has(f.name);
+  });
+};
+
+const renameFields = (
+  fields: SourcedField[],
+  mapping?: Record<string, string>,
+): SourcedField[] => {
+  if (!mapping) return fields;
+  return fields.map((f) => {
+    const qualified = mapping[`${f.source}.${f.name}`];
+    if (qualified !== undefined) return { ...f, name: qualified };
+    const bare = mapping[f.name];
+    if (bare !== undefined) return { ...f, name: bare };
+    return f;
+  });
+};
+
+const assertUniqueFieldNames = (fields: TypeField[], typeName: string): void => {
+  const seen = new Set<string>();
+  for (const field of fields) {
+    if (seen.has(field.name)) {
+      throw new Error(
+        `duplicate field '${field.name}' on the composed shape of ${typeName}`,
+      );
+    }
+    seen.add(field.name);
+  }
 };
 
 /** Bare `id` drops every field named `id`. Qualified `contact_source.id` drops `id` only from that source. */
@@ -330,9 +373,13 @@ export const expandTypes = (types: Type[]): Type[] => {
     }
     stack.delete(name);
     const merged = [
-      ...dropFields(renameFields(inherited, type.mapping), type.removeFields),
+      ...dropFields(
+        renameFields(extractFields(inherited, type.extract), type.mapping),
+        type.removeFields,
+      ),
       ...type.fields,
     ];
+    assertUniqueFieldNames(merged, name);
     cache.set(name, merged);
     return merged;
   };

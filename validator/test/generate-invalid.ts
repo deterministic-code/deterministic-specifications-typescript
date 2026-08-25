@@ -453,6 +453,7 @@ function viewLoc(path: string): Mut | null {
         person: {
           inherits: "set",
           union: ["source"],
+          extract: ["source.name"],
           mapping: { id: "person_id" },
           remove_fields: ["bio"],
           fields: [],
@@ -462,7 +463,16 @@ function viewLoc(path: string): Mut | null {
   };
   const unioned: Host = {
     version: "1.0.0",
-    types: [{ mix: { union: ["person", "other"], fields: [] } }],
+    types: [
+      {
+        mix: {
+          union: ["person", "other"],
+          extract: ["person.name"],
+          mapping: { name: "person_name" },
+          fields: [],
+        },
+      },
+    ],
   };
   if (path === "#") return { host: VIEW_MIN, loc: [] };
   if (path === "#/properties/includes")
@@ -477,6 +487,8 @@ function viewLoc(path: string): Mut | null {
       return { host: inherit, loc: ["types", 0, "person", "union"] };
     if (path.includes("properties/inherits"))
       return { host: inherit, loc: ["types", 0, "person", "inherits"] };
+    if (path.includes("properties/extract"))
+      return { host: inherit, loc: ["types", 0, "person", "extract"] };
     if (path.includes("properties/mapping"))
       return { host: inherit, loc: ["types", 0, "person", "mapping"] };
     if (path.includes("properties/remove_fields"))
@@ -486,8 +498,20 @@ function viewLoc(path: string): Mut | null {
   if (path.includes("unionType")) {
     if (path.includes("properties/union"))
       return { host: unioned, loc: ["types", 0, "mix", "union"] };
+    if (path.includes("properties/extract"))
+      return { host: unioned, loc: ["types", 0, "mix", "extract"] };
+    if (path.includes("properties/mapping"))
+      return { host: unioned, loc: ["types", 0, "mix", "mapping"] };
+    if (path.includes("properties/remove_fields"))
+      return { host: unioned, loc: ["types", 0, "mix", "remove_fields"] };
     return { host: unioned, loc: ["types", 0, "mix"] };
   }
+  if (path.includes("extractProp"))
+    return { host: inherit, loc: ["types", 0, "person", "extract"] };
+  if (path.includes("mappingProp"))
+    return { host: inherit, loc: ["types", 0, "person", "mapping"] };
+  if (path.includes("removeFieldsProp"))
+    return { host: inherit, loc: ["types", 0, "person", "remove_fields"] };
   if (path.includes("shapedType") || path.includes("typeDef"))
     return { host: shaped, loc: ["types", 0, "person"] };
   if (path.includes("fieldEntry/propertyNames") || path.includes("fieldEntry"))
@@ -1216,6 +1240,9 @@ function mutate(
     return { data: set(host, loc, "nope"), includes: "equal to" };
   }
   if (keyword === "oneOf" || keyword === "anyOf") {
+    if (path.includes("mappingProp/propertyNames")) {
+      return { data: set(host, loc, { "NOT-VALID": "x" }), includes: "must match" };
+    }
     const current = get(host, loc);
     const replacement =
       current && typeof current === "object" && !Array.isArray(current)
