@@ -779,6 +779,60 @@ types:
     ).toBe(true);
   });
 
+  test("rejects an inherit+union id clash", () => {
+    const result = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - contacts_base:
+      inherits: set
+      fields:
+        - email:
+            type: string
+  - contact_source:
+      inherits: set
+      fields:
+        - name:
+            type: string
+  - contact:
+      inherits: contacts_base
+      union: [contact_source]
+      fields: []
+`),
+    );
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some((e) =>
+        /contacts_base.id and contact_source.id collide on the composed shape of contact; use mapping or remove_fields and give new names/
+          .test(e.message),
+      ),
+    ).toBe(true);
+  });
+
+  test("rejects a local field that collides with an inherited field", () => {
+    const result = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - user:
+      inherits: set
+      fields:
+        - email:
+            type: string
+  - person:
+      inherits: user
+      fields:
+        - email:
+            type: string
+`),
+    );
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some((e) =>
+        /user.email and person.email collide on the composed shape of person; use mapping or remove_fields and give new names/
+          .test(e.message),
+      ),
+    ).toBe(true);
+  });
+
   test("rejects unknown union members", () => {
     const result = checkTypeModel(
       parsed(`version: 1.0.0
