@@ -21,7 +21,7 @@ describe("DeterministicParser", () => {
             type: integer
   - role:
       tags: [datasource_type]
-      inherits: dictionary
+      inherits: set
       fields:
         - code:
             type: string

@@ -244,20 +244,58 @@ const builtInFields = (name: string): TypeField[] | undefined => {
   if (name === "set") {
     return [field("id", "integer")];
   }
-  if (name === "dictionary") {
-    return [field("name", "string"), field("value", "string")];
-  }
   return undefined;
 };
 
-type SourcedField = TypeField & { source?: string };
+type SourcedField = TypeField & { source?: string; original?: string };
 
 const withSource = (fields: TypeField[], source: string): SourcedField[] =>
-  fields.map((f) => ({ ...f, source }));
+  fields.map((f) => ({ ...f, source, original: f.name }));
 
 const publicField = (field: SourcedField): TypeField => {
-  const { source: _source, ...rest } = field;
+  const { source: _source, original: _original, ...rest } = field;
   return rest;
+};
+
+const splitRef = (ref: string): { type: string; field: string } => {
+  const dot = ref.indexOf(".");
+  if (dot === -1) return { type: "", field: ref };
+  return { type: ref.slice(0, dot), field: ref.slice(dot + 1) };
+};
+
+const identityFieldNames = (
+  type: Type | undefined,
+  byName: Map<string, Type>,
+  stack: Set<string> = new Set(),
+): Set<string> => {
+  if (!type) return new Set();
+  /* v8 ignore next -- expandTypes already rejects inherit cycles */
+  if (stack.has(type.name)) return new Set();
+  if (type.ids !== undefined && type.ids.length > 0) return new Set(type.ids);
+  const marked = type.fields.filter((f) => f.isId === true).map((f) => f.name);
+  if (marked.length > 0) return new Set(marked);
+  if (type.inherits === "set") return new Set(["id"]);
+  if (type.inherits && type.inherits !== "dictionary") {
+    stack.add(type.name);
+    return identityFieldNames(byName.get(type.inherits), byName, stack);
+  }
+  return new Set();
+};
+
+/** Owner FK is omitted when a dictionary is flattened onto another type. */
+const isOwnerIdentityRef = (
+  references: string | [string, string] | undefined,
+  selfName: string,
+  byName: Map<string, Type>,
+): boolean => {
+  if (references === undefined) return false;
+  const parts = (Array.isArray(references) ? references : [references]).map(
+    splitRef,
+  );
+  const owner = parts[0]!.type;
+  if (!owner || owner === selfName) return false;
+  const identity = identityFieldNames(byName.get(owner), byName);
+  return parts.every((p) => p.type === owner && identity.has(p.field));
 };
 
 /** For each source named in extract, keep only the listed fields. Unmentioned sources stay intact. */
@@ -300,15 +338,21 @@ const renameFields = (
   });
 };
 
-const assertUniqueFieldNames = (fields: TypeField[], typeName: string): void => {
-  const seen = new Set<string>();
+const assertUniqueFieldNames = (
+  fields: SourcedField[],
+  typeName: string,
+): void => {
+  const seen = new Map<string, SourcedField>();
   for (const field of fields) {
-    if (seen.has(field.name)) {
+    const prev = seen.get(field.name);
+    if (prev) {
+      const left = `${prev.source}.${prev.original}`;
+      const right = `${field.source}.${field.original}`;
       throw new Error(
-        `duplicate field '${field.name}' on the composed shape of ${typeName}`,
+        `${left} and ${right} collide on the composed shape of ${typeName}; use mapping or remove_fields and give new names`,
       );
     }
-    seen.add(field.name);
+    seen.set(field.name, field);
   }
 };
 
@@ -330,14 +374,12 @@ const shouldDrop = (field: SourcedField, remove: string[]): boolean => {
   return false;
 };
 
-const dropFields = (
+const keepFields = (
   fields: SourcedField[],
   remove?: string[],
-): TypeField[] => {
-  const kept = !remove?.length
-    ? fields
-    : fields.filter((f) => !shouldDrop(f, remove));
-  return kept.map(publicField);
+): SourcedField[] => {
+  if (!remove?.length) return fields;
+  return fields.filter((f) => !shouldDrop(f, remove));
 };
 
 export const expandTypes = (types: Type[]): Type[] => {
@@ -358,30 +400,39 @@ export const expandTypes = (types: Type[]): Type[] => {
     const type = byName.get(name);
     if (!type) return [];
     stack.add(name);
+    const composeSource = (source: string): SourcedField[] => {
+      const fields = withSource(resolve(source, stack), source);
+      const srcType = byName.get(source);
+      if (srcType?.inherits !== "dictionary") return fields;
+      return fields.filter(
+        (f) => !isOwnerIdentityRef(f.references, srcType.name, byName),
+      );
+    };
     let inherited: SourcedField[] = [];
     if (type.inherits) {
       inherited =
         type.inherits === "set" && hasAuthoredIdentity(type)
           ? []
-          : withSource(resolve(type.inherits, stack), type.inherits);
+          : composeSource(type.inherits);
     }
     for (const member of type.union ?? []) {
-      inherited = [
-        ...inherited,
-        ...withSource(resolve(member, stack), member),
-      ];
+      inherited = [...inherited, ...composeSource(member)];
     }
     stack.delete(name);
-    const merged = [
-      ...dropFields(
-        renameFields(extractFields(inherited, type.extract), type.mapping),
-        type.removeFields,
-      ),
-      ...type.fields,
-    ];
+    const kept = keepFields(
+      renameFields(extractFields(inherited, type.extract), type.mapping),
+      type.removeFields,
+    );
+    const local: SourcedField[] = type.fields.map((f) => ({
+      ...f,
+      source: name,
+      original: f.name,
+    }));
+    const merged = [...kept, ...local];
     assertUniqueFieldNames(merged, name);
-    cache.set(name, merged);
-    return merged;
+    const result = merged.map(publicField);
+    cache.set(name, result);
+    return result;
   };
 
   const resolveIds = (name: string, stack: Set<string>): string[] | undefined => {

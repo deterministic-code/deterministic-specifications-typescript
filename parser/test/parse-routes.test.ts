@@ -38,7 +38,7 @@ const TYPES = `types:
             type: integer
   - role:
       tags: [datasource_type]
-      inherits: dictionary
+      inherits: set
       fields: []
 `;
 
@@ -247,6 +247,10 @@ routes: []
         - parent_id:
             type: integer
             references: parent.id
+        - key:
+            type: string
+        - value:
+            type: string
   - via_missing:
       tags: [view_type]
       inherits: ghost_base

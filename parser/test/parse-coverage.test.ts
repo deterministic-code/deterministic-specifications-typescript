@@ -244,7 +244,7 @@ describe("parser coverage", () => {
       fields: []
   - role:
       tags: [view_type]
-      inherits: dictionary
+      inherits: set
       fields: []
   - link:
       tags: [many_to_many]
@@ -500,7 +500,7 @@ routes:
             type: integer
   - role:
       tags: [view_type]
-      inherits: dictionary
+      inherits: set
       fields: []
   - link:
       tags: [many_to_many]
