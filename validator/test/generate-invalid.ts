@@ -461,19 +461,6 @@ function viewLoc(path: string): Mut | null {
       },
     ],
   };
-  const unioned: Host = {
-    version: "1.0.0",
-    types: [
-      {
-        mix: {
-          union: ["person", "other"],
-          extract: ["person.name"],
-          mapping: { name: "person_name" },
-          fields: [],
-        },
-      },
-    ],
-  };
   if (path === "#") return { host: VIEW_MIN, loc: [] };
   if (path === "#/properties/includes")
     return {
@@ -482,7 +469,27 @@ function viewLoc(path: string): Mut | null {
     };
   if (path === "#/properties/types") return { host: shaped, loc: ["types"] };
   if (path.includes("typeEntry")) return { host: shaped, loc: ["types", 0] };
-  if (path.includes("inheritType")) {
+  if (path.includes("dictionaryFields")) {
+    const dictionary: Host = {
+      version: "1.0.0",
+      types: [
+        {
+          settings: {
+            inherits: "dictionary",
+            fields: [
+              { owner_id: { type: "integer", references: "user.id" } },
+              { key: { type: "string" } },
+              { value: { type: "string" } },
+            ],
+          },
+        },
+      ],
+    };
+    if (path.includes("properties/fields") || path.includes("required"))
+      return { host: dictionary, loc: ["types", 0, "settings", "fields"] };
+    return { host: dictionary, loc: ["types", 0, "settings"] };
+  }
+  if (path.includes("typeDef")) {
     if (path.includes("properties/union"))
       return { host: inherit, loc: ["types", 0, "person", "union"] };
     if (path.includes("properties/inherits"))
@@ -493,18 +500,9 @@ function viewLoc(path: string): Mut | null {
       return { host: inherit, loc: ["types", 0, "person", "mapping"] };
     if (path.includes("properties/remove_fields"))
       return { host: inherit, loc: ["types", 0, "person", "remove_fields"] };
+    if (path.includes("properties/fields") || path.includes("properties/ids") || path.includes("properties/tags"))
+      return { host: shaped, loc: ["types", 0, "person"] };
     return { host: inherit, loc: ["types", 0, "person"] };
-  }
-  if (path.includes("unionType")) {
-    if (path.includes("properties/union"))
-      return { host: unioned, loc: ["types", 0, "mix", "union"] };
-    if (path.includes("properties/extract"))
-      return { host: unioned, loc: ["types", 0, "mix", "extract"] };
-    if (path.includes("properties/mapping"))
-      return { host: unioned, loc: ["types", 0, "mix", "mapping"] };
-    if (path.includes("properties/remove_fields"))
-      return { host: unioned, loc: ["types", 0, "mix", "remove_fields"] };
-    return { host: unioned, loc: ["types", 0, "mix"] };
   }
   if (path.includes("extractProp"))
     return { host: inherit, loc: ["types", 0, "person", "extract"] };
@@ -512,8 +510,6 @@ function viewLoc(path: string): Mut | null {
     return { host: inherit, loc: ["types", 0, "person", "mapping"] };
   if (path.includes("removeFieldsProp"))
     return { host: inherit, loc: ["types", 0, "person", "remove_fields"] };
-  if (path.includes("shapedType") || path.includes("typeDef"))
-    return { host: shaped, loc: ["types", 0, "person"] };
   if (path.includes("fieldEntry/propertyNames") || path.includes("fieldEntry"))
     return { host: shaped, loc: ["types", 0, "person", "fields", 0] };
   if (path.includes("fieldDef/properties/type"))
@@ -554,8 +550,8 @@ function viewLoc(path: string): Mut | null {
               fields: [
                 {
                   role: {
-                    type: "datasource_types.role",
-                    references: "datasource_types.role.id",
+                    type: "role",
+                    references: "role.id",
                   },
                 },
               ],
@@ -572,16 +568,16 @@ function viewLoc(path: string): Mut | null {
       host: { ...VIEW_MIN, includes: [{ file: "x.yaml" }] },
       loc: ["includes", 0],
     };
-  if (path.includes("datasourceDirectiveInclude"))
+  if (path.includes("typesDirectiveInclude"))
     return {
       host: {
         ...VIEW_MIN,
-        includes: [{ datasource_types: { include: "*" } }],
+        includes: [{ types: { filter: 'tag == "datasource_type"' } }],
       },
-      loc: path.includes("datasource_types/properties")
-        ? ["includes", 0, "datasource_types", path.includes("filter") ? "filter" : "include"]
-        : path.includes("properties/datasource_types")
-          ? ["includes", 0, "datasource_types"]
+      loc: path.includes("types/properties")
+        ? ["includes", 0, "types", "filter"]
+        : path.includes("properties/types")
+          ? ["includes", 0, "types"]
           : ["includes", 0],
     };
   if (path.includes("idInclude/properties/id"))

@@ -59,23 +59,37 @@ describe("live engines", () => {
     });
   });
 
-  test("reports an unexpected-property error (additionalProperties)", async () => {
+  test("reports only the unexpected type property", async () => {
     const result = await datasource.validate(
-      yaml(
-        "types:\n  - user:\n      fields:\n        - email:\n            type: string\n      bogus_key: 1\n",
-      ),
+      yaml(`types:
+  - base:
+      tags: [view_type]
+      tags2: [x]
+      fields:
+        - name:
+            type: string
+`),
     );
     expect(result.valid).toBe(false);
-    expect(result.errors.some((e) => /bogus_key/.test(e.message))).toBe(true);
+    expect(result.errors.map((e) => e.message)).toEqual([
+      "/types/0/base must NOT have additional properties (property: tags2)",
+    ]);
   });
 
-  test("reports a missing required property (fields)", async () => {
+  test("accepts a type that has tags and no inherits, union, or fields", async () => {
+    expect(
+      await datasource.validate(yaml("types:\n  - user:\n      tags: [view_type]\n")),
+    ).toEqual({ valid: true, errors: [] });
+  });
+
+  test("rejects dictionary without fields", async () => {
     const result = await datasource.validate(
-      yaml("types:\n  - user:\n      tags: [view_type]\n"),
+      yaml("types:\n  - settings:\n      inherits: dictionary\n"),
     );
     expect(result.valid).toBe(false);
-    expect(result.errors.some((e) => /must match|oneOf|fields/.test(e.message))).toBe(
-      true,
+    expect(result.errors.some((e) => /fields/.test(e.message))).toBe(true);
+    expect(result.errors.some((e) => /oneOf|exactly one/.test(e.message))).toBe(
+      false,
     );
   });
 
