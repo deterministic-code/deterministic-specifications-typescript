@@ -61,6 +61,7 @@ function collectTables(
     const def = asRecord(pair.body) ?? {};
     const fields = new Map<string, string>();
     const fieldList = def.fields;
+    let occCount = 0;
     if (Array.isArray(fieldList)) {
       const seenFields = new Set<string>();
       fieldList.forEach((field, fi) => {
@@ -89,8 +90,30 @@ function collectTables(
             ),
           );
         }
+        if (
+          fdef.use_native_row_version === true &&
+          fdef.is_optimistic_concurrency !== true
+        ) {
+          errors.push(
+            specErr(
+              parsed,
+              `${fieldPath}/use_native_row_version`,
+              `use_native_row_version on '${fp.key}' requires is_optimistic_concurrency: true`,
+            ),
+          );
+        }
+        if (fdef.is_optimistic_concurrency === true) occCount += 1;
         fields.set(fp.key, fieldPath);
       });
+    }
+    if (occCount > 1) {
+      errors.push(
+        specErr(
+          parsed,
+          tablePath,
+          `at most one is_optimistic_concurrency field on ${pair.key}`,
+        ),
+      );
     }
     tables.set(pair.key, { path: tablePath, fields });
   });
@@ -196,6 +219,98 @@ function checkCompanionTypes(
   return errors;
 }
 
+const OCC_FIELD_TYPES = new Set(["integer", "number", "datetime", "binary"]);
+
+function inheritByType(companion: unknown): Map<string, string> {
+  const out = new Map<string, string>();
+  const list = asRecord(companion)?.types;
+  if (!Array.isArray(list)) return out;
+  for (const entry of list) {
+    const pair = singleKey(entry);
+    if (!pair) continue;
+    const inherits = asRecord(pair.body)?.inherits;
+    if (typeof inherits === "string") out.set(pair.key, inherits);
+  }
+  return out;
+}
+
+function companionFieldType(
+  companionFields: Map<string, Map<string, Record<string, unknown>>>,
+  inherits: Map<string, string>,
+  typeName: string,
+  fieldName: string,
+): string | undefined {
+  let current: string | undefined = typeName;
+  const seen = new Set<string>();
+  while (current && !seen.has(current)) {
+    seen.add(current);
+    const rec = companionFields.get(current)?.get(fieldName);
+    if (typeof rec?.type === "string") return rec.type;
+    current = inherits.get(current);
+  }
+}
+
+function checkOccCompanion(
+  parsed: ParsedYaml,
+  companionTypes: unknown,
+): SpecValidationResult["errors"] {
+  const errors: SpecValidationResult["errors"] = [];
+  const companionFields = indexTypeFields(companionTypes);
+  const inherits = inheritByType(companionTypes);
+  const types = asRecord(parsed.data)?.types;
+  if (!Array.isArray(types)) return errors;
+  types.forEach((entry, ti) => {
+    const pair = singleKey(entry);
+    if (!pair) return;
+    const tablePath = `/types/${ti}/${pair.key}`;
+    const fields = asRecord(pair.body)?.fields;
+    if (!Array.isArray(fields)) return;
+    const known = companionFields.get(pair.key);
+    fields.forEach((field, fi) => {
+      const fp = singleKey(field);
+      if (!fp) return;
+      const fdef = asRecord(fp.body) ?? {};
+      if (fdef.is_optimistic_concurrency !== true) return;
+      const fieldPath = `${tablePath}/fields/${fi}/${fp.key}`;
+      if (!known?.has(fp.key)) {
+        errors.push(
+          specErr(
+            parsed,
+            fieldPath,
+            `unknown field '${fp.key}' on ${pair.key} (not in types.yaml)`,
+          ),
+        );
+        return;
+      }
+      const fieldType = companionFieldType(
+        companionFields,
+        inherits,
+        pair.key,
+        fp.key,
+      );
+      if (fieldType !== undefined && !OCC_FIELD_TYPES.has(fieldType)) {
+        errors.push(
+          specErr(
+            parsed,
+            fieldPath,
+            `is_optimistic_concurrency field '${fp.key}' on ${pair.key} must be integer, number, datetime, or binary`,
+          ),
+        );
+      }
+      if (fdef.use_native_row_version === true && fieldType !== "binary") {
+        errors.push(
+          specErr(
+            parsed,
+            `${fieldPath}/use_native_row_version`,
+            `use_native_row_version on '${fp.key}' requires a binary field`,
+          ),
+        );
+      }
+    });
+  });
+  return errors;
+}
+
 export function checkDatasourceModel(
   parsed: ParsedYaml,
   companionTypes?: unknown,
@@ -206,6 +321,7 @@ export function checkDatasourceModel(
   errors.push(...checkIndexes(parsed, tables, companionFields));
   if (companionTypes !== undefined) {
     errors.push(...checkCompanionTypes(parsed, companionTypes));
+    errors.push(...checkOccCompanion(parsed, companionTypes));
   }
   return errors.length === 0
     ? { valid: true, errors: [] }

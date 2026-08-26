@@ -45,6 +45,8 @@ export type DatasourceFieldOverlay = {
   isUnique?: boolean;
   mapping?: string;
   isFixedId?: boolean;
+  isOptimisticConcurrency?: boolean;
+  useNativeRowVersion?: boolean;
 };
 
 export type DatasourceIndex = { name: string; fields: string[]; isUnique: boolean };
@@ -52,7 +54,6 @@ export type DatasourceIndex = { name: string; fields: string[]; isUnique: boolea
 export type DatasourceTable = {
   name: string;
   mapping?: string;
-  useOptimisticConcurrency?: boolean;
   fields: DatasourceFieldOverlay[];
   indexes: DatasourceIndex[];
   uniqueIndexFields: string[];

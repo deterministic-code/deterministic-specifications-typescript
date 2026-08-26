@@ -1,7 +1,3 @@
-export type OccTable = {
-  useOptimisticConcurrency?: boolean;
-};
-
 export const FRONTEND_FRAMEWORKS = [
   "vite",
   "next",
@@ -20,7 +16,6 @@ export type ISettings = {
   readonly descriptionDoc: boolean;
   readonly createIndex: boolean;
   readonly libraryReferenceMode: string | undefined;
-  usesOptimisticConcurrency(table: OccTable): boolean;
 };
 
 const isFrontendFramework = (raw: string): raw is FrontendFramework =>
@@ -28,7 +23,6 @@ const isFrontendFramework = (raw: string): raw is FrontendFramework =>
 
 export const fromSettings = (raw: Record<string, string>): ISettings => {
   const comments = raw["comments"];
-  const globalOcc = raw["datasource.use_optimistic_concurrency"] !== "false";
   const frontendFramework = raw["frontend_generate_framework"];
   if (
     frontendFramework !== undefined &&
@@ -51,7 +45,5 @@ export const fromSettings = (raw: Record<string, string>): ISettings => {
     descriptionDoc: comments === "description",
     createIndex: raw["codegen.create_index"] !== "false",
     libraryReferenceMode: raw["languages.typescript.library_reference_mode"],
-    usesOptimisticConcurrency: (table) =>
-      table.useOptimisticConcurrency ?? globalOcc,
   };
 };
