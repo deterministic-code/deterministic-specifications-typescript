@@ -334,13 +334,20 @@ class Parser {
           ...(fnode.has("is_fixed_id")
             ? { isFixedId: fnode.bool("is_fixed_id") }
             : {}),
+          ...(fnode.has("is_optimistic_concurrency")
+            ? {
+                isOptimisticConcurrency: fnode.bool(
+                  "is_optimistic_concurrency",
+                ),
+              }
+            : {}),
+          ...(fnode.has("use_native_row_version")
+            ? { useNativeRowVersion: fnode.bool("use_native_row_version") }
+            : {}),
         }));
       return {
         name,
         ...(node.str("mapping") ? { mapping: node.str("mapping") } : {}),
-        ...(node.has("use_optimistic_concurrency")
-          ? { useOptimisticConcurrency: node.bool("use_optimistic_concurrency") }
-          : {}),
         fields,
         indexes,
         uniqueIndexFields,

@@ -86,22 +86,3 @@ describe("fromSettings", () => {
     assert.equal(settings.descriptionDoc, false);
   });
 });
-
-describe("usesOptimisticConcurrency", () => {
-  it("prefers explicit per-type flag over the global default", () => {
-    const on = fromSettings({});
-    const off = fromSettings({
-      "datasource.use_optimistic_concurrency": "false",
-    });
-    assert.equal(
-      on.usesOptimisticConcurrency({ useOptimisticConcurrency: false }),
-      false,
-    );
-    assert.equal(
-      off.usesOptimisticConcurrency({ useOptimisticConcurrency: true }),
-      true,
-    );
-    assert.equal(on.usesOptimisticConcurrency({}), true);
-    assert.equal(off.usesOptimisticConcurrency({}), false);
-  });
-});

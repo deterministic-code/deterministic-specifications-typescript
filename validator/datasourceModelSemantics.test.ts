@@ -64,6 +64,133 @@ describe("datasource model semantics", () => {
     expect(result.errors[0]?.message).toMatch(/is_fixed_id.*is_readonly/);
   });
 
+  test("rejects two is_optimistic_concurrency fields on one table", async () => {
+    const result = await validator().validate(doc(`types:
+  - item:
+      fields:
+        - updated:
+            is_optimistic_concurrency: true
+        - version:
+            is_optimistic_concurrency: true
+`));
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]?.message).toMatch(
+      /at most one is_optimistic_concurrency/,
+    );
+  });
+
+  test("rejects use_native_row_version without is_optimistic_concurrency", async () => {
+    const result = await validator().validate(doc(`types:
+  - item:
+      fields:
+        - version:
+            use_native_row_version: true
+`));
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]?.message).toMatch(
+      /use_native_row_version.*is_optimistic_concurrency/,
+    );
+  });
+
+  test("accepts one OCC field", async () => {
+    const result = await validator().validate(doc(`types:
+  - item:
+      fields:
+        - version:
+            is_optimistic_concurrency: true
+            use_native_row_version: true
+`));
+    expect(result).toEqual({ valid: true, errors: [] });
+  });
+
+  test("companion types.yaml rejects OCC on an unknown field", () => {
+    const result = checkDatasourceModel(
+      parsed(`version: 1.0.0
+types:
+  - user:
+      fields:
+        - ghost:
+            is_optimistic_concurrency: true
+`),
+      { types: [{ user: { fields: [{ email: { type: "string" } }] } }] },
+    );
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some((e) => /unknown field 'ghost' on user/.test(e.message)),
+    ).toBe(true);
+  });
+
+  test("companion types.yaml rejects OCC on a disallowed field type", () => {
+    const result = checkDatasourceModel(
+      parsed(`version: 1.0.0
+types:
+  - user:
+      fields:
+        - email:
+            is_optimistic_concurrency: true
+`),
+      { types: [{ user: { fields: [{ email: { type: "string" } }] } }] },
+    );
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some((e) =>
+        /must be integer, number, datetime, or binary/.test(e.message),
+      ),
+    ).toBe(true);
+  });
+
+  test("companion types.yaml accepts OCC on an inherited binary field", () => {
+    expect(
+      checkDatasourceModel(
+        parsed(`version: 1.0.0
+types:
+  - child:
+      fields:
+        - version:
+            is_optimistic_concurrency: true
+            use_native_row_version: true
+`),
+        {
+          types: [
+            { base: { fields: [{ version: { type: "binary" } }] } },
+            {
+              child: {
+                inherits: "base",
+                fields: [{ name: { type: "string" } }],
+              },
+            },
+          ],
+        },
+      ),
+    ).toEqual({ valid: true, errors: [] });
+  });
+
+  test("companion types.yaml rejects native rowversion on a non-binary field", () => {
+    const result = checkDatasourceModel(
+      parsed(`version: 1.0.0
+types:
+  - user:
+      fields:
+        - stamp:
+            is_optimistic_concurrency: true
+            use_native_row_version: true
+`),
+      {
+        types: [
+          {
+            user: {
+              fields: [{ stamp: { type: "datetime" } }],
+            },
+          },
+        ],
+      },
+    );
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some((e) => /requires a binary field/.test(e.message)),
+    ).toBe(true);
+  });
+
   test("accepts is_fixed_id with is_readonly", async () => {
     const result = await validator().validate(doc(`types:
   - item:
@@ -188,6 +315,27 @@ types:
     }
   });
 
+  test("OCC companion checks skip malformed entries", () => {
+    expect(
+      checkDatasourceModel(
+        parsed(`version: 1.0.0
+types:
+  - user:
+      fields:
+        - []
+        - email: 1
+`),
+        {
+          types: [
+            [],
+            {},
+            { user: { fields: [{ email: { type: "string" } }] } },
+          ],
+        },
+      ).valid,
+    ).toBe(true);
+  });
+
   test("collects a non-mapping table body and field body", () => {
     expect(
       checkDatasourceModel(
@@ -253,6 +401,9 @@ types:
     expect(
       checkDatasourceModel(parsed("version: 1.0.0\n"), { types: [] }).valid,
     ).toBe(true);
+    expect(checkDatasourceModel(parsed("version: 1.0.0\n"), {}).valid).toBe(
+      true,
+    );
     expect(
       checkDatasourceModel(
         parsed("version: 1.0.0\ntypes:\n  - []\n  - {}\n"),

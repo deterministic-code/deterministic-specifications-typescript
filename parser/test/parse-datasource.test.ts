@@ -28,11 +28,15 @@ describe("parse datasource.yaml", () => {
 types:
   - user:
       mapping: users
-      use_optimistic_concurrency: false
       fields:
         - email:
             is_unique: true
             mapping: email_address
+        - updated:
+            is_optimistic_concurrency: true
+        - version:
+            is_optimistic_concurrency: false
+            use_native_row_version: false
       indexes:
         - email_uidx:
             fields: [email]
@@ -43,9 +47,10 @@ types:
     assert.equal(det.datasource.length, 2);
     const user = det.datasource.find((t) => t.name === "user");
     assert.equal(user?.mapping, "users");
-    assert.equal(user?.useOptimisticConcurrency, false);
     assert.equal(user?.fields[0]?.isUnique, true);
     assert.equal(user?.fields[0]?.mapping, "email_address");
+    assert.equal(user?.fields[1]?.isOptimisticConcurrency, true);
+    assert.equal(user?.fields[2]?.useNativeRowVersion, false);
     assert.deepEqual(user?.uniqueIndexFields, ["email"]);
     assert.ok(det.datasource.some((t) => t.name === "note"));
   });
