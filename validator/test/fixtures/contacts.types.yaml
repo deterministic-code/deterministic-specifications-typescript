@@ -48,9 +48,10 @@ types:
             type: string
             size: unlimited
             is_nullable: true
-  - addresses_base:
+  - address:
       tags:
         - datasource_type
+        - view_type
       inherits: base
       fields:
         - contact_id:
@@ -122,15 +123,10 @@ types:
       fields:
         - addresses:
             type: address[]
-            references: addresses_base.contact_id
+            references: address.contact_id
         - phones:
             type: phone[]
             references: phones_base.contact_id
-  - address:
-      tags:
-        - view_type
-      inherits: addresses_base
-      fields: []
   - phone:
       tags:
         - view_type
