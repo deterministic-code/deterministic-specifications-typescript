@@ -14,6 +14,7 @@ export type TypeField = {
   kind: FieldKind;
   base: string;
   isArray: boolean;
+  isMap?: boolean;
   isNullable: boolean;
   isId?: boolean;
   size?: number | [number, number] | "unlimited";
@@ -57,6 +58,7 @@ export type DatasourceTable = {
   fields: DatasourceFieldOverlay[];
   indexes: DatasourceIndex[];
   uniqueIndexFields: string[];
+  useOptimisticConcurrency?: boolean;
 };
 
 export type ServiceByField = { field: string; type: string; size?: number };
@@ -138,15 +140,22 @@ const SET_FIELDS: TypeField[] = [{
   kind: "primitive",
   base: "integer",
   isArray: false,
+  isMap: false,
   isNullable: false,
 }];
 
 export const parseFieldType = (
   raw: string,
-): { kind: FieldKind; base: string; isArray: boolean } => {
+): { kind: FieldKind; base: string; isArray: boolean; isMap: boolean } => {
   const isArray = raw.endsWith("[]");
-  const base = isArray ? raw.slice(0, -2) : raw;
-  return { kind: PRIMITIVES.has(base) ? "primitive" : "type", base, isArray };
+  const isMap = raw.endsWith("{}");
+  const base = isArray || isMap ? raw.slice(0, -2) : raw;
+  return {
+    kind: PRIMITIVES.has(base) ? "primitive" : "type",
+    base,
+    isArray,
+    isMap,
+  };
 };
 
 type IdentityType = Pick<Type, "inherits" | "fields" | "ids">;

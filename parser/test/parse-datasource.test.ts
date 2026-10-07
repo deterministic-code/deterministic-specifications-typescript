@@ -28,6 +28,7 @@ describe("parse datasource.yaml", () => {
 types:
   - user:
       mapping: users
+      use_optimistic_concurrency: true
       fields:
         - email:
             is_unique: true
@@ -47,6 +48,7 @@ types:
     assert.equal(det.datasource.length, 2);
     const user = det.datasource.find((t) => t.name === "user");
     assert.equal(user?.mapping, "users");
+    assert.equal(user?.useOptimisticConcurrency, true);
     assert.equal(user?.fields[0]?.isUnique, true);
     assert.equal(user?.fields[0]?.mapping, "email_address");
     assert.equal(user?.fields[1]?.isOptimisticConcurrency, true);

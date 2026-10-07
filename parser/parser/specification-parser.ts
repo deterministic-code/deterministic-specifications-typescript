@@ -290,6 +290,7 @@ class Parser {
       kind: parsed.kind,
       base: parsed.base,
       isArray: parsed.isArray,
+      isMap: parsed.isMap,
       isNullable: node.bool("is_nullable"),
       ...(node.bool("is_id") ? { isId: true } : {}),
       ...(size !== undefined ? { size } : {}),
@@ -351,6 +352,13 @@ class Parser {
         fields,
         indexes,
         uniqueIndexFields,
+        ...(node.has("use_optimistic_concurrency")
+          ? {
+              useOptimisticConcurrency: node.bool(
+                "use_optimistic_concurrency",
+              ),
+            }
+          : {}),
       };
     });
 
