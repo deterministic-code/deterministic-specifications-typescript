@@ -26,16 +26,25 @@ describe("specification helpers", () => {
       kind: "primitive",
       base: "string",
       isArray: false,
+      isMap: false,
     });
     assert.deepEqual(parseFieldType("role[]"), {
       kind: "type",
       base: "role",
       isArray: true,
+      isMap: false,
+    });
+    assert.deepEqual(parseFieldType("settings{}"), {
+      kind: "type",
+      base: "settings",
+      isArray: false,
+      isMap: true,
     });
     assert.deepEqual(parseFieldType("user_summary"), {
       kind: "type",
       base: "user_summary",
       isArray: false,
+      isMap: false,
     });
   });
 

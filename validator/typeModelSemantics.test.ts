@@ -124,6 +124,180 @@ types:
     expect(result).toEqual({ valid: true, errors: [] });
   });
 
+  test("accepts a view-only dictionary and an explicit {} map field", () => {
+    const result = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - card_labels:
+      tags: [view_type]
+      inherits: dictionary
+      fields:
+        - key:
+            type: string
+        - value:
+            type: string
+  - contact_card:
+      tags: [view_type]
+      fields:
+        - display_name:
+            type: string
+        - labels:
+            type: card_labels{}
+            references: card_labels.key
+`),
+    );
+    expect(result).toEqual({ valid: true, errors: [] });
+  });
+
+  test("rejects dual-tagged dictionaries, view-only owner FKs, and bad {} targets", () => {
+    const dual = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - settings:
+      tags: [datasource_type, view_type]
+      inherits: dictionary
+      fields:
+        - key:
+            type: string
+        - value:
+            type: string
+`),
+    );
+    expect(dual.valid).toBe(false);
+    expect(
+      dual.errors.some((e) =>
+        /must not be tagged both datasource_type and view_type/.test(e.message),
+      ),
+    ).toBe(true);
+
+    const viewOwner = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - user:
+      inherits: set
+      fields:
+        - email:
+            type: string
+  - labels:
+      tags: [view_type]
+      inherits: dictionary
+      fields:
+        - user_id:
+            references: user.id
+        - key:
+            type: string
+        - value:
+            type: string
+`),
+    );
+    expect(viewOwner.valid).toBe(false);
+    expect(
+      viewOwner.errors.some((e) =>
+        /view-only dictionary type labels must not reference an owner identity/.test(
+          e.message,
+        ),
+      ),
+    ).toBe(true);
+
+    const badMap = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - user:
+      inherits: set
+      fields:
+        - extras:
+            type: user{}
+            references: user.key
+`),
+    );
+    expect(badMap.valid).toBe(false);
+    expect(
+      badMap.errors.some((e) =>
+        /type user\{\} must name a dictionary type/.test(e.message),
+      ),
+    ).toBe(true);
+  });
+
+  test("accepts dictionary values that are arrays or maps of non-datasource types", () => {
+    const result = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - user:
+      inherits: set
+      fields:
+        - email:
+            type: string
+  - card_labels:
+      tags: [view_type]
+      inherits: dictionary
+      fields:
+        - key:
+            type: string
+        - value:
+            type: string
+  - flags:
+      tags: [datasource_type]
+      inherits: dictionary
+      fields:
+        - user_id:
+            references: user.id
+        - key:
+            type: string
+        - value:
+            type: string[]
+  - maps:
+      tags: [datasource_type]
+      inherits: dictionary
+      fields:
+        - user_id:
+            references: user.id
+        - key:
+            type: string
+        - value:
+            type: card_labels{}
+            references: card_labels.key
+`),
+    );
+    expect(result).toEqual({ valid: true, errors: [] });
+  });
+
+  test("rejects a dictionary whose value is a datasource_type", () => {
+    const result = checkTypeModel(
+      parsed(`version: 1.0.0
+types:
+  - user:
+      tags: [datasource_type]
+      inherits: set
+      fields:
+        - email:
+            type: string
+  - note:
+      tags: [datasource_type]
+      fields:
+        - body:
+            type: string
+  - settings:
+      tags: [datasource_type]
+      inherits: dictionary
+      fields:
+        - user_id:
+            references: user.id
+        - key:
+            type: string
+        - value:
+            type: note
+`),
+    );
+    expect(result.valid).toBe(false);
+    expect(
+      result.errors.some((e) =>
+        /dictionary type settings value must not be a datasource_type/.test(
+          e.message,
+        ),
+      ),
+    ).toBe(true);
+  });
+
   test("rejects a dictionary missing key, value, or an owner identity reference", () => {
     const missingKey = checkTypeModel(
       parsed(`version: 1.0.0

@@ -17,6 +17,7 @@ type TypeKind = "inherit" | "union" | "shaped";
 type TypeInfo = {
   path: string;
   kind: TypeKind;
+  tags: string[];
   inherits?: string;
   union?: string[];
   mapping?: Record<string, string>;
@@ -28,6 +29,7 @@ type TypeInfo = {
   ids?: string[];
   idFields: string[];
   fields: Map<string, string>;
+  fieldTypes: Map<string, string>;
   fieldReferences: Map<string, string | [string, string]>;
 };
 
@@ -145,6 +147,7 @@ function collectTypes(
     const def = asRecord(pair.body);
     if (!def) return;
     const fields = new Map<string, string>();
+    const fieldTypes = new Map<string, string>();
     const fieldReferences = new Map<string, string | [string, string]>();
     const idFields: string[] = [];
     const fieldList = def.fields;
@@ -168,6 +171,7 @@ function collectTypes(
         }
         fields.set(fp.key, fieldPath);
         const body = asRecord(fp.body);
+        if (typeof body?.type === "string") fieldTypes.set(fp.key, body.type);
         if (body?.is_id === true) idFields.push(fp.key);
         const references = referencesOf(body);
         if (references !== undefined) fieldReferences.set(fp.key, references);
@@ -176,6 +180,7 @@ function collectTypes(
     types.set(pair.key, {
       path,
       kind: typeKind(def),
+      tags: stringList(def.tags) ?? [],
       inherits: typeof def.inherits === "string" ? def.inherits : undefined,
       union: stringList(def.union),
       mapping: mappingOf(def),
@@ -188,6 +193,7 @@ function collectTypes(
       ids: stringList(def.ids),
       idFields,
       fields,
+      fieldTypes,
       fieldReferences,
     });
   });
@@ -549,7 +555,8 @@ function checkReferences(
 
   const isTypeName = (raw: unknown): boolean => {
     if (typeof raw !== "string") return false;
-    const base = raw.endsWith("[]") ? raw.slice(0, -2) : raw;
+    const base =
+      raw.endsWith("[]") || raw.endsWith("{}") ? raw.slice(0, -2) : raw;
     return types.has(base);
   };
 
@@ -672,6 +679,30 @@ function checkIdentity(
   return errors;
 }
 
+const PRIMITIVE_FIELD_TYPES = new Set([
+  "string",
+  "character",
+  "number",
+  "integer",
+  "unsignedinteger",
+  "biginteger",
+  "unsignedbiginteger",
+  "smallinteger",
+  "unsignedsmallinteger",
+  "float",
+  "decimal",
+  "boolean",
+  "datetime",
+  "binary",
+  "uuid",
+]);
+
+const fieldTypeBase = (raw: string): string =>
+  raw.endsWith("[]") || raw.endsWith("{}") ? raw.slice(0, -2) : raw;
+
+const isViewOnlyDictionary = (info: TypeInfo): boolean =>
+  info.tags.includes("view_type") && !info.tags.includes("datasource_type");
+
 function checkDictionary(
   parsed: ParsedYaml,
   types: Map<string, TypeInfo>,
@@ -697,10 +728,31 @@ function checkDictionary(
         ),
       );
     }
-    const hasOwner = [...info.fieldReferences.values()].some((ref) =>
+    const isDatasource = info.tags.includes("datasource_type");
+    const isView = info.tags.includes("view_type");
+    if (isDatasource && isView) {
+      errors.push(
+        specErr(
+          parsed,
+          info.path,
+          `dictionary type ${name} must not be tagged both datasource_type and view_type`,
+        ),
+      );
+    }
+    const ownerCount = [...info.fieldReferences.values()].filter((ref) =>
       isOwnerIdentityRef(ref, name, types),
-    );
-    if (!hasOwner) {
+    ).length;
+    if (isViewOnlyDictionary(info)) {
+      if (ownerCount > 0) {
+        errors.push(
+          specErr(
+            parsed,
+            info.path,
+            `view-only dictionary type ${name} must not reference an owner identity`,
+          ),
+        );
+      }
+    } else if (ownerCount === 0) {
       errors.push(
         specErr(
           parsed,
@@ -708,6 +760,59 @@ function checkDictionary(
           `dictionary type ${name} must have one field that references the owner identity`,
         ),
       );
+    }
+    const valueType = info.fieldTypes.get("value");
+    if (valueType !== undefined) {
+      const base = fieldTypeBase(valueType);
+      if (!PRIMITIVE_FIELD_TYPES.has(base)) {
+        const valueInfo = types.get(base);
+        if (valueInfo?.tags.includes("datasource_type")) {
+          errors.push(
+            specErr(
+              parsed,
+              `${info.path}/fields`,
+              `dictionary type ${name} value must not be a datasource_type`,
+            ),
+          );
+        }
+      }
+    }
+  }
+  return errors;
+}
+
+function checkMapFields(
+  parsed: ParsedYaml,
+  types: Map<string, TypeInfo>,
+): SpecValidationResult["errors"] {
+  const errors: SpecValidationResult["errors"] = [];
+  for (const [typeName, info] of types) {
+    for (const [fieldName, fieldPath] of info.fields) {
+      const rawType = info.fieldTypes.get(fieldName);
+      if (rawType === undefined || !rawType.endsWith("{}")) continue;
+      const dictName = rawType.slice(0, -2);
+      const dict = types.get(dictName);
+      if (dict?.inherits !== "dictionary") {
+        errors.push(
+          specErr(
+            parsed,
+            `${fieldPath}/type`,
+            `${typeName}.${fieldName} type ${rawType} must name a dictionary type`,
+          ),
+        );
+        continue;
+      }
+      const expected = `${dictName}.key`;
+      const ref = info.fieldReferences.get(fieldName);
+      if (ref !== expected) {
+        errors.push(
+          specErr(
+            parsed,
+            `${fieldPath}/references`,
+            `${typeName}.${fieldName} must reference ${expected}`,
+          ),
+        );
+      }
     }
   }
   return errors;
@@ -717,6 +822,7 @@ export function checkTypeModel(parsed: ParsedYaml): SpecValidationResult {
   const { types, errors } = collectTypes(parsed);
   errors.push(...checkComposition(parsed, types));
   errors.push(...checkDictionary(parsed, types));
+  errors.push(...checkMapFields(parsed, types));
   errors.push(...checkReferences(parsed, types));
   errors.push(...checkDecimalSizes(parsed));
   errors.push(...checkIdentity(parsed, types));
@@ -731,13 +837,16 @@ function typeInfoFromEntry(entry: unknown): { name: string; info: TypeInfo } | n
   const def = asRecord(pair.body);
   if (!def) return null;
   const fields = new Map<string, string>();
+  const fieldTypes = new Map<string, string>();
   const fieldReferences = new Map<string, string | [string, string]>();
   if (Array.isArray(def.fields)) {
     def.fields.forEach((field, fi) => {
       const fp = singleKey(field);
       if (!fp) return;
       fields.set(fp.key, `/types/${fp.key}/fields/${fi}`);
-      const references = referencesOf(asRecord(fp.body));
+      const body = asRecord(fp.body);
+      if (typeof body?.type === "string") fieldTypes.set(fp.key, body.type);
+      const references = referencesOf(body);
       if (references !== undefined) fieldReferences.set(fp.key, references);
     });
   }
@@ -746,6 +855,7 @@ function typeInfoFromEntry(entry: unknown): { name: string; info: TypeInfo } | n
     info: {
       path: `/types/${pair.key}`,
       kind: typeKind(def),
+      tags: stringList(def.tags) ?? [],
       inherits: typeof def.inherits === "string" ? def.inherits : undefined,
       union: stringList(def.union),
       mapping: mappingOf(def),
@@ -759,6 +869,7 @@ function typeInfoFromEntry(entry: unknown): { name: string; info: TypeInfo } | n
           })
         : [],
       fields,
+      fieldTypes,
       fieldReferences,
     },
   };
