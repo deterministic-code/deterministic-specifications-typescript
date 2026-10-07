@@ -79,9 +79,10 @@ types:
             type: string
             size: 64
             is_nullable: true
-  - phones_base:
+  - phone:
       tags:
         - datasource_type
+        - view_type
       inherits: base
       fields:
         - contact_id:
@@ -126,12 +127,7 @@ types:
             references: address.contact_id
         - phones:
             type: phone[]
-            references: phones_base.contact_id
-  - phone:
-      tags:
-        - view_type
-      inherits: phones_base
-      fields: []
+            references: phone.contact_id
   - contact_group:
       tags:
         - view_type
