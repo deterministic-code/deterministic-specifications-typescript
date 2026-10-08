@@ -170,6 +170,8 @@ describe("parse types.yaml", () => {
       "description",
       "addresses",
       "phones",
+      "settings",
+      "prefs",
     ]);
     const address = det.expandedTypes.find((t) => t.name === "address");
     assert.deepEqual(address?.fields.map((f) => f.name), [

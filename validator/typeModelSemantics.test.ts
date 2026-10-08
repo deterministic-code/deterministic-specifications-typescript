@@ -672,6 +672,8 @@ types:
       "description",
       "addresses",
       "phones",
+      "settings",
+      "prefs",
     ]);
   });
 
