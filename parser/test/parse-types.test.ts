@@ -179,12 +179,15 @@ describe("parse types.yaml", () => {
       "updated",
       "version",
       "contact_id",
+      "address_type_id",
       "line1",
       "line2",
       "city",
       "region",
       "postal_code",
       "country",
+      "address_type_name",
+      "description",
     ]);
     const group = det.expandedTypes.find((t) => t.name === "contact_group");
     assert.ok(group?.fields.some((f) => f.name === "members"));
