@@ -147,12 +147,9 @@ describe("parse types.yaml", () => {
     assert.equal(contact?.inherits, "contacts_base");
     assert.deepEqual(contact?.union, ["contact_source"]);
     assert.deepEqual(contact?.mapping, { name: "contact_source_name" });
-    assert.deepEqual(contact?.removeFields, [
-      "contact_source.id",
-      "contact_source.uuid",
-      "contact_source.created",
-      "contact_source.updated",
-      "contact_source.version",
+    assert.deepEqual(contact?.extract, [
+      "contact_source.name",
+      "contact_source.description",
     ]);
     const expanded = det.expandedTypes.find((t) => t.name === "contact");
     assert.deepEqual(expanded?.fields.map((f) => f.name), [
@@ -170,6 +167,8 @@ describe("parse types.yaml", () => {
       "description",
       "addresses",
       "phones",
+      "settings",
+      "prefs",
     ]);
     const address = det.expandedTypes.find((t) => t.name === "address");
     assert.deepEqual(address?.fields.map((f) => f.name), [
